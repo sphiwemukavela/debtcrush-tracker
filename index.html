@@ -3,24 +3,25 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>DebtCrush — Offline + Cloud Joint Debt & Balloon Attack Tracker</title>
+  <title>DebtCrush — Household Debt, Balloon & Monthly Budget Tracker</title>
   <style>
     :root {
-      --bg: #0b1120;
+      --bg: #090d16;
       --card: #111827;
-      --card-2: #1f2937;
-      --border: #334155;
+      --card-2: #182235;
+      --border: #263248;
       --text: #f8fafc;
       --muted: #94a3b8;
       --emerald: #10b981;
-      --emerald-dim: rgba(16, 185, 129, 0.15);
+      --emerald-dim: rgba(16, 185, 129, 0.14);
       --pink: #ec4899;
       --amber: #f59e0b;
-      --amber-dim: rgba(245, 158, 11, 0.15);
+      --amber-dim: rgba(245, 158, 11, 0.14);
       --red: #ef4444;
-      --red-dim: rgba(239, 68, 68, 0.15);
+      --red-dim: rgba(239, 68, 68, 0.14);
       --blue: #3b82f6;
-      --blue-dim: rgba(59, 130, 246, 0.15);
+      --blue-dim: rgba(59, 130, 246, 0.14);
+      --radius: 16px;
     }
     html.light {
       --bg: #f1f5f9;
@@ -36,95 +37,213 @@
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
-      padding-bottom: 60px;
+      padding-bottom: 72px;
     }
-    .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    .container { max-width: 1140px; margin: 0 auto; padding: 24px 20px; }
+
+    /* Header */
     header {
-      background: var(--card);
+      background: rgba(17, 24, 39, 0.92);
+      backdrop-filter: blur(12px);
       border-bottom: 1px solid var(--border);
-      padding: 12px 16px;
+      padding: 14px 20px;
       position: sticky;
       top: 0;
       z-index: 50;
     }
+    html.light header { background: rgba(255, 255, 255, 0.92); }
     .header-inner {
-      max-width: 1200px;
+      max-width: 1140px;
       margin: 0 auto;
       display: flex;
       flex-wrap: wrap;
-      gap: 10px;
+      gap: 14px;
       align-items: center;
       justify-content: space-between;
     }
-    .auth-bar {
-      max-width: 1200px;
-      margin: 8px auto 0;
-      padding-top: 8px;
-      border-top: 1px dashed var(--border);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      align-items: center;
-      justify-content: space-between;
-      font-size: 0.82rem;
-    }
-    .auth-controls { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
-    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.2rem; }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.25rem; letter-spacing: -0.02em; }
     .badge {
       font-size: 0.72rem;
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: 999px;
       font-weight: 600;
       border: 1px solid var(--border);
       background: var(--card-2);
     }
-    .badge.ok { color: var(--emerald); border-color: rgba(16,185,129,0.4); background: var(--emerald-dim); }
-    .badge.warn { color: var(--amber); border-color: rgba(245,158,11,0.4); background: var(--amber-dim); }
+    .badge.ok { color: var(--emerald); border-color: rgba(16,185,129,0.35); background: var(--emerald-dim); }
+    .badge.warn { color: var(--amber); border-color: rgba(245,158,11,0.35); background: var(--amber-dim); }
     .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+
+    /* Buttons & Inputs */
     button, select, input {
       font-family: inherit;
       font-size: 0.85rem;
-      border-radius: 8px;
+      border-radius: 10px;
       border: 1px solid var(--border);
       background: var(--card-2);
       color: var(--text);
-      padding: 6px 10px;
+      padding: 8px 12px;
     }
-    button { cursor: pointer; font-weight: 600; transition: opacity 0.15s; }
-    button:hover { opacity: 0.9; }
+    button { cursor: pointer; font-weight: 600; transition: all 0.15s ease; }
+    button:hover { opacity: 0.92; transform: translateY(-1px); }
+    button:active { transform: translateY(0); }
+    button:disabled { opacity: 0.45; cursor: not-allowed; transform: none; }
     button.primary { background: var(--emerald); color: #052e16; border-color: var(--emerald); }
     button.amber { background: var(--amber); color: #451a03; border-color: var(--amber); }
-    button.danger { background: var(--red-dim); color: #fca5a5; border-color: rgba(239,68,68,0.4); }
-    .tabs { display: flex; gap: 8px; overflow-x: auto; margin: 18px 0; padding-bottom: 4px; }
-    .tab-btn { background: var(--card); border: 1px solid var(--border); padding: 9px 16px; border-radius: 10px; white-space: nowrap; }
-    .tab-btn.active { background: var(--emerald); color: #052e16; border-color: var(--emerald); }
-    .grid { display: grid; gap: 16px; }
+    button.danger { background: var(--red-dim); color: #fca5a5; border-color: rgba(239,68,68,0.35); }
+    button.ghost { background: transparent; border-color: var(--border); }
+
+    /* Dropdown Menu for Data Tools */
+    .dropdown { position: relative; display: inline-block; }
+    .dropdown-menu {
+      position: absolute;
+      right: 0;
+      top: calc(100% + 6px);
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 6px;
+      min-width: 185px;
+      box-shadow: 0 12px 30px rgba(0,0,0,0.45);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+      z-index: 60;
+    }
+    .dropdown-menu button {
+      text-align: left;
+      background: transparent;
+      border: none;
+      width: 100%;
+      padding: 8px 10px;
+    }
+    .dropdown-menu button:hover { background: var(--card-2); transform: none; }
+
+    /* Auth Lock Screen */
+    .lock-screen {
+      max-width: 440px;
+      margin: 64px auto;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      padding: 32px 28px;
+      text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,0.35);
+    }
+    .lock-icon {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: var(--emerald-dim);
+      color: var(--emerald);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.6rem;
+      margin-bottom: 14px;
+    }
+    .lock-screen h2 { font-size: 1.35rem; margin-bottom: 6px; }
+    .lock-screen p { color: var(--muted); font-size: 0.88rem; margin-bottom: 22px; }
+    .lock-form { display: flex; flex-direction: column; gap: 12px; text-align: left; }
+    .lock-form input { width: 100%; padding: 10px 12px; }
+
+    /* Navigation Tabs */
+    .tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      margin-bottom: 22px;
+      padding-bottom: 4px;
+    }
+    .tab-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 10px 18px;
+      border-radius: 12px;
+      white-space: nowrap;
+      color: var(--muted);
+    }
+    .tab-btn.active {
+      background: var(--emerald);
+      color: #052e16;
+      border-color: var(--emerald);
+      font-weight: 700;
+    }
+
+    /* Layout Grids & Cards */
+    .grid { display: grid; gap: 18px; }
     .grid-4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
-    .card { background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 18px; }
-    .kpi-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
-    .kpi-val { font-size: 1.65rem; font-weight: 800; margin-top: 4px; }
-    .kpi-sub { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
-    .progress-bar { width: 100%; height: 10px; background: var(--card-2); border-radius: 999px; overflow: hidden; margin: 10px 0; }
-    .progress-fill { height: 100%; background: var(--emerald); transition: width 0.3s; }
-    .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
-    .stack { display: flex; flex-direction: column; gap: 12px; }
-    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(360px, 1fr)); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+    .sub-card {
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+    }
+    .kpi-label { font-size: 0.74rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; font-weight: 700; }
+    .kpi-val { font-size: 1.65rem; font-weight: 800; margin-top: 6px; letter-spacing: -0.02em; }
+    .kpi-sub { font-size: 0.8rem; color: var(--muted); margin-top: 6px; }
+    .progress-bar { width: 100%; height: 9px; background: var(--bg); border-radius: 999px; overflow: hidden; margin: 12px 0; }
+    .progress-fill { height: 100%; background: var(--emerald); transition: width 0.3s ease; }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .stack { display: flex; flex-direction: column; gap: 18px; }
+    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+
+    /* Budget Checklist Styling */
+    .budget-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-radius: 12px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+      transition: opacity 0.15s;
+    }
+    .budget-item.paid { opacity: 0.65; }
+    .budget-item.paid .budget-title { text-decoration: line-through; color: var(--muted); }
+    .budget-left { display: flex; align-items: center; gap: 12px; }
+    .budget-check {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--emerald);
+      cursor: pointer;
+    }
+
+    /* Tables & Pills */
     table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
-    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
-    th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; }
-    .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
+    th, td { text-align: left; padding: 12px 10px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; }
+    .pill { display: inline-block; padding: 3px 9px; border-radius: 999px; font-size: 0.72rem; font-weight: 700; }
     .pill-green { background: var(--emerald-dim); color: var(--emerald); }
     .pill-amber { background: var(--amber-dim); color: var(--amber); }
     .pill-red { background: var(--red-dim); color: var(--red); }
     .pill-blue { background: var(--blue-dim); color: var(--blue); }
-    dialog { background: var(--card); color: var(--text); border: 1px solid var(--border); border-radius: 16px; padding: 22px; max-width: 480px; width: 92%; margin: auto; }
-    dialog::backdrop { background: rgba(0,0,0,0.7); }
-    .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
-    .form-group label { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
-    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* Dialog Modals */
+    dialog {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 18px;
+      padding: 24px;
+      max-width: 480px;
+      width: 92%;
+      margin: auto;
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.75); backdrop-filter: blur(4px); }
+    .form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+    .form-group label { font-size: 0.8rem; color: var(--muted); font-weight: 600; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .hidden { display: none !important; }
-    svg.chart { width: 100%; height: 220px; display: block; }
+    svg.chart { width: 100%; height: 210px; display: block; }
   </style>
 </head>
 <body>
@@ -133,72 +252,147 @@
   <div class="header-inner">
     <div class="brand">
       <span>💥 DebtCrush</span>
-      <span id="storageBadge" class="badge ok">💾 Local Cache Ready</span>
+      <span id="storageBadge" class="badge warn">🔒 Locked</span>
     </div>
-    <div class="controls">
+
+    <!-- Shown ONLY when signed in -->
+    <div id="headerControls" class="controls hidden">
       <select id="profileFilter" title="Active Profile View">
         <option value="HOUSEHOLD">🏠 Household (All)</option>
       </select>
-      <button class="primary" onclick="openPaymentModal()">+ Log Payment</button>
-      <button class="amber" onclick="openExpenseModal()">💳 Log Expense</button>
-      <button onclick="openAccountModal()">+ Account</button>
-      <button onclick="exportJSON()">⬇️ Export JSON</button>
-      <button onclick="document.getElementById('importFile').click()">⬆️ Import JSON</button>
+      <button class="primary" onclick="openPaymentModal()">+ Payment</button>
+      <button class="amber" onclick="openExpenseModal()">+ Card Charge</button>
+
+      <div class="dropdown">
+        <button class="ghost" onclick="toggleMoreMenu(event)">⚙️ Manage ▾</button>
+        <div id="moreMenu" class="dropdown-menu hidden">
+          <button onclick="openAccountModal(); closeMoreMenu();">➕ Add Debt Account</button>
+          <button onclick="exportJSON(); closeMoreMenu();">⬇️ Export JSON Backup</button>
+          <button onclick="document.getElementById('importFile').click(); closeMoreMenu();">⬆️ Import JSON Backup</button>
+          <button onclick="toggleTheme(); closeMoreMenu();">🌓 Switch Theme</button>
+          <button style="color:#fca5a5;" onclick="firebaseSignOut(); closeMoreMenu();">🚪 Sign Out</button>
+        </div>
+      </div>
       <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)" />
-      <button onclick="toggleTheme()" title="Toggle Theme">🌓</button>
-    </div>
-  </div>
-  <div class="auth-bar">
-    <div id="authStatusText" style="color:var(--muted);">☁️ Offline mode — Sign in to sync across devices via Firebase</div>
-    <div id="authSignedOutControls" class="auth-controls">
-      <input type="email" id="authEmail" placeholder="Email" />
-      <input type="password" id="authPassword" placeholder="Password" />
-      <button class="primary" onclick="firebaseSignIn()">Sign In</button>
-    </div>
-    <div id="authSignedInControls" class="auth-controls hidden">
-      <span id="authUserLabel" class="pill pill-green">Signed In</span>
-      <button onclick="firebaseSignOut()">Sign Out</button>
     </div>
   </div>
 </header>
 
-<div class="container">
+<!-- LOCKED / SIGN-IN VIEW (Default when signed out — zero balances/accounts shown) -->
+<main id="lockedView" class="container">
+  <div class="lock-screen">
+    <div class="lock-icon">🔐</div>
+    <h2>Sign In to DebtCrush</h2>
+    <p>Your household accounts, balances, and monthly budget are protected. Sign in to load your synced workspace.</p>
+    <form class="lock-form" onsubmit="firebaseSignIn(event)">
+      <div class="form-group" style="margin-bottom:0;">
+        <label>Email Address</label>
+        <input type="email" id="authEmail" placeholder="you@example.com" required />
+      </div>
+      <div class="form-group" style="margin-bottom:4px;">
+        <label>Password</label>
+        <input type="password" id="authPassword" placeholder="••••••••" required />
+      </div>
+      <button type="submit" class="primary" style="width:100%; padding:11px; font-size:0.95rem;">Sign In & Sync</button>
+      <div id="authErrorMsg" style="color:#fca5a5; font-size:0.8rem; text-align:center;" class="hidden"></div>
+    </form>
+  </div>
+</main>
+
+<!-- AUTHENTICATED WORKSPACE (Hidden until signed in) -->
+<main id="appView" class="container hidden">
   <div class="tabs">
-    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard & Accounts</button>
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Debt Overview</button>
+    <button class="tab-btn" data-tab="budget" onclick="switchTab('budget')">💰 Monthly Budget</button>
     <button class="tab-btn" data-tab="balloon" onclick="switchTab('balloon')">🎈 Balloon Attack</button>
-    <button class="tab-btn" data-tab="activity" onclick="switchTab('activity')">📜 Activity & Cashflow</button>
-    <button class="tab-btn" data-tab="challenges" onclick="switchTab('challenges')">🏆 Challenges & Rewards</button>
+    <button class="tab-btn" data-tab="activity" onclick="switchTab('activity')">📜 Ledger</button>
+    <button class="tab-btn" data-tab="challenges" onclick="switchTab('challenges')">🏆 Challenges</button>
   </div>
 
+  <!-- 1. DEBT OVERVIEW TAB -->
   <section id="tab-dashboard" class="stack">
     <div class="grid grid-4" id="kpiGrid"></div>
+
     <div class="card">
-      <div class="flex-between" style="margin-bottom:12px;">
-        <h3>Active Debt Accounts</h3>
+      <div class="flex-between" style="margin-bottom:16px;">
+        <div>
+          <h3>Debt Accounts</h3>
+          <p style="font-size:0.82rem; color:var(--muted);">Ordered by your chosen payoff strategy</p>
+        </div>
         <div style="display:flex; gap:8px; align-items:center;">
-          <span style="font-size:0.82rem; color:var(--muted);">Strategy:</span>
           <select id="strategySelect" onchange="changeStrategy(this.value)">
             <option value="avalanche">Avalanche (Highest APR)</option>
             <option value="snowball">Snowball (Lowest Balance)</option>
             <option value="balloon">Balloon Attack First</option>
           </select>
+          <button class="ghost" onclick="openAccountModal()">+ Account</button>
         </div>
       </div>
       <div class="grid grid-2" id="accountsGrid"></div>
     </div>
+
     <div class="card">
-      <h3 style="margin-bottom:8px;">6-Month Repayments vs. New Card Charges</h3>
-      <p style="font-size:0.82rem; color:var(--muted); margin-bottom:12px;">Green bars show total debt payments logged; red bars show new credit/store card expenses.</p>
+      <div class="flex-between" style="margin-bottom:10px;">
+        <div>
+          <h3>6-Month Repayments vs. New Card Charges</h3>
+          <p style="font-size:0.82rem; color:var(--muted);">Green: Debt repayments · Red: New card expenses</p>
+        </div>
+      </div>
       <div id="cashflowChartWrap"></div>
     </div>
   </section>
 
+  <!-- 2. MONTHLY BUDGET & INCOME TAB -->
+  <section id="tab-budget" class="stack hidden">
+    <div class="card">
+      <div class="flex-between">
+        <div>
+          <h2>💰 Monthly Income & Expense Checklist</h2>
+          <p style="color:var(--muted); font-size:0.85rem;">Track monthly income, tick off bills as you pay them, and see what remains.</p>
+        </div>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <input type="month" id="budgetMonthInput" onchange="changeBudgetMonth(this.value)" />
+          <button class="ghost" onclick="resetBudgetChecks()" title="Uncheck all expenses for a new month">🔄 Reset Checks</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-4" id="budgetKpiGrid"></div>
+
+    <div class="grid grid-2">
+      <!-- INCOME COLUMN -->
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:14px;">
+          <div>
+            <h3>💵 Monthly Income</h3>
+            <p style="font-size:0.8rem; color:var(--muted);">Salaries, rental income, side hustles</p>
+          </div>
+          <button class="primary" onclick="openIncomeModal()">+ Add Income</button>
+        </div>
+        <div id="incomeList" class="stack" style="gap:10px;"></div>
+      </div>
+
+      <!-- MONTHLY EXPENSES CHECKLIST COLUMN -->
+      <div class="card">
+        <div class="flex-between" style="margin-bottom:14px;">
+          <div>
+            <h3>✅ Monthly Expenses Checklist</h3>
+            <p style="font-size:0.8rem; color:var(--muted);">Check each item once paid for the month</p>
+          </div>
+          <button class="amber" onclick="openBudgetExpenseModal()">+ Add Expense</button>
+        </div>
+        <div id="budgetExpenseList" class="stack" style="gap:10px;"></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. BALLOON ATTACK TAB -->
   <section id="tab-balloon" class="stack hidden">
     <div class="card">
       <div class="flex-between">
         <div>
           <h2>🎈 Vehicle Balloon Attack Simulator</h2>
-          <p style="color:var(--muted); font-size:0.86rem;">Eliminate the lump-sum residual cliff before contract maturity.</p>
+          <p style="color:var(--muted); font-size:0.85rem;">Eliminate the lump-sum residual cliff before contract maturity.</p>
         </div>
         <select id="balloonAccountSelect" onchange="selectBalloonAccount(this.value)"></select>
       </div>
@@ -208,47 +402,51 @@
       <div id="balloonContent" class="stack" style="margin-top:16px;">
         <div class="grid grid-4" id="balloonKpis"></div>
         <div class="grid grid-2">
-          <div class="card" style="background:var(--card-2);">
+          <div class="sub-card">
             <h4>Attack Levers</h4>
-            <div class="form-group" style="margin-top:10px;">
-              <label>Extra Monthly Overpayment / Sinking Contribution (<span id="lblExtraMonthly">R 0</span>)</label>
+            <div class="form-group" style="margin-top:12px;">
+              <label>Extra Monthly Overpayment (<span id="lblExtraMonthly">R 0</span>)</label>
               <input type="range" id="simExtraMonthly" min="0" max="15000" step="250" oninput="updateBalloonSim()" />
             </div>
             <div class="form-group">
-              <label>Annual Lump-Sum Strike (Bonus / Tax Refund) (<span id="lblAnnualLump">R 0</span>)</label>
+              <label>Annual Lump-Sum Strike (<span id="lblAnnualLump">R 0</span>)</label>
               <input type="range" id="simAnnualLump" min="0" max="100000" step="2500" oninput="updateBalloonSim()" />
             </div>
             <div class="row-actions">
-              <button class="amber" onclick="quickLogBalloon()">🎈 Log Balloon Sinking Payment Now</button>
+              <button class="amber" onclick="quickLogBalloon()">🎈 Log Balloon Payment Now</button>
             </div>
           </div>
-          <div class="card" style="background:var(--card-2);">
+          <div class="sub-card">
             <h4>Strategy Breakdown</h4>
-            <div id="balloonSummaryText" class="stack" style="margin-top:10px; font-size:0.9rem;"></div>
+            <div id="balloonSummaryText" class="stack" style="margin-top:12px; font-size:0.88rem; gap:10px;"></div>
           </div>
         </div>
-        <div class="card" style="background:var(--card-2);">
-          <h4 style="margin-bottom:8px;">Balloon Runway Projection (Standard Cliff vs. Attack Curve)</h4>
+        <div class="sub-card">
+          <h4 style="margin-bottom:8px;">Balloon Runway Projection</h4>
           <div id="balloonChartWrap"></div>
         </div>
       </div>
     </div>
   </section>
 
+  <!-- 4. ACTIVITY LEDGER TAB -->
   <section id="tab-activity" class="stack hidden">
     <div class="card">
-      <div class="flex-between" style="margin-bottom:12px;">
-        <h3>Unified Activity Ledger (Payments & Expenses)</h3>
+      <div class="flex-between" style="margin-bottom:14px;">
+        <div>
+          <h3>Debt Payments & Card Charges Ledger</h3>
+          <p style="font-size:0.82rem; color:var(--muted);">History of debt repayments and credit/store card swipes</p>
+        </div>
         <div style="display:flex; gap:8px;">
           <button class="primary" onclick="openPaymentModal()">+ Payment</button>
-          <button class="amber" onclick="openExpenseModal()">+ Expense</button>
+          <button class="amber" onclick="openExpenseModal()">+ Card Charge</button>
         </div>
       </div>
       <div style="overflow-x:auto;">
         <table>
           <thead>
             <tr>
-              <th>Date</th><th>Type</th><th>Account</th><th>Member</th><th>Category / Notes</th><th>Amount</th><th>Action</th>
+              <th>Date</th><th>Type</th><th>Account</th><th>Member</th><th>Notes</th><th>Amount</th><th>Action</th>
             </tr>
           </thead>
           <tbody id="ledgerBody"></tbody>
@@ -257,32 +455,81 @@
     </div>
   </section>
 
+  <!-- 5. CHALLENGES & REWARDS TAB -->
   <section id="tab-challenges" class="stack hidden">
     <div class="grid grid-2" id="profileXpGrid"></div>
     <div class="card">
-      <div class="flex-between" style="margin-bottom:12px;">
+      <div class="flex-between" style="margin-bottom:14px;">
         <h3>Active Challenges</h3>
         <div style="display:flex; gap:8px; flex-wrap:wrap;">
-          <button onclick="addPresetChallenge('balloon')">+ 🎈 Balloon Starter</button>
-          <button onclick="addPresetChallenge('nospend')">+ 🚫 30-Day No-Spend</button>
-          <button onclick="openChallengeModal()">+ Custom Challenge</button>
+          <button class="ghost" onclick="addPresetChallenge('balloon')">+ 🎈 Balloon Starter</button>
+          <button class="ghost" onclick="addPresetChallenge('nospend')">+ 🚫 30-Day No-Spend</button>
+          <button class="primary" onclick="openChallengeModal()">+ Custom</button>
         </div>
       </div>
       <div class="grid grid-2" id="challengesGrid"></div>
     </div>
     <div class="card">
-      <div class="flex-between" style="margin-bottom:12px;">
+      <div class="flex-between" style="margin-bottom:14px;">
         <h3>XP Rewards Store</h3>
-        <button onclick="openRewardModal()">+ Add Reward</button>
+        <button class="ghost" onclick="openRewardModal()">+ Add Reward</button>
       </div>
       <div class="grid grid-2" id="rewardsGrid"></div>
     </div>
   </section>
-</div>
+</main>
 
 <!-- MODALS -->
+<dialog id="incomeModal">
+  <h3 id="incModalTitle" style="margin-bottom:14px;">Add Monthly Income</h3>
+  <form onsubmit="saveIncomeItem(event)">
+    <input type="hidden" id="incId" />
+    <div class="form-group"><label>Income Source</label><input type="text" id="incSource" placeholder="e.g., Sphiwe Salary, Rental Units" required /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Member</label><select id="incOwnerId"></select></div>
+      <div class="form-group"><label>Amount (R)</label><input type="number" id="incAmount" step="0.01" min="0" required /></div>
+    </div>
+    <div class="form-group"><label>Pay Day / Notes (optional)</label><input type="text" id="incNotes" placeholder="e.g., Paid on 25th" /></div>
+    <div class="row-actions" style="justify-content:flex-end;">
+      <button type="button" class="ghost" onclick="document.getElementById('incomeModal').close()">Cancel</button>
+      <button type="submit" class="primary">Save Income</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="budgetExpenseModal">
+  <h3 id="bExpModalTitle" style="margin-bottom:14px;">Add Monthly Budget Expense</h3>
+  <form onsubmit="saveBudgetExpenseItem(event)">
+    <input type="hidden" id="bExpId" />
+    <div class="form-group"><label>Expense Name</label><input type="text" id="bExpName" placeholder="e.g., Bond / Rent, Electricity, Groceries" required /></div>
+    <div class="form-row">
+      <div class="form-group"><label>Category</label>
+        <select id="bExpCategory">
+          <option>Housing & Utilities</option>
+          <option>Debt & Finance</option>
+          <option>Groceries & Household</option>
+          <option>Transport & Fuel</option>
+          <option>Insurance & Medical</option>
+          <option>Family & Kids</option>
+          <option>Subscriptions & Internet</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Budgeted Amount (R)</label><input type="number" id="bExpAmount" step="0.01" min="0" required /></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label>Assigned To</label><select id="bExpOwnerId"></select></div>
+      <div class="form-group"><label>Due Day (optional)</label><input type="number" id="bExpDueDay" min="1" max="31" placeholder="e.g., 1" /></div>
+    </div>
+    <div class="row-actions" style="justify-content:flex-end;">
+      <button type="button" class="ghost" onclick="document.getElementById('budgetExpenseModal').close()">Cancel</button>
+      <button type="submit" class="amber">Save Expense</button>
+    </div>
+  </form>
+</dialog>
+
 <dialog id="paymentModal">
-  <h3 style="margin-bottom:12px;">Log Debt Payment</h3>
+  <h3 style="margin-bottom:14px;">Log Debt Payment</h3>
   <form onsubmit="savePayment(event)">
     <div class="form-group"><label>Account</label><select id="payAccountId" required></select></div>
     <div class="form-row">
@@ -301,14 +548,14 @@
     </div>
     <div class="form-group"><label>Notes</label><input type="text" id="payNotes" /></div>
     <div class="row-actions" style="justify-content:flex-end;">
-      <button type="button" onclick="document.getElementById('paymentModal').close()">Cancel</button>
+      <button type="button" class="ghost" onclick="document.getElementById('paymentModal').close()">Cancel</button>
       <button type="submit" class="primary">Save Payment</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="expenseModal">
-  <h3 style="margin-bottom:12px;">💳 Log Card / Account Expense</h3>
+  <h3 style="margin-bottom:14px;">💳 Log Card Charge</h3>
   <form onsubmit="saveExpense(event)">
     <div class="form-group"><label>Card / Account</label><select id="expAccountId" required></select></div>
     <div class="form-row">
@@ -328,14 +575,14 @@
       <div class="form-group"><label>Merchant / Note</label><input type="text" id="expNotes" /></div>
     </div>
     <div class="row-actions" style="justify-content:flex-end;">
-      <button type="button" onclick="document.getElementById('expenseModal').close()">Cancel</button>
-      <button type="submit" class="amber">Log Expense</button>
+      <button type="button" class="ghost" onclick="document.getElementById('expenseModal').close()">Cancel</button>
+      <button type="submit" class="amber">Log Charge</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="accountModal">
-  <h3 id="accModalTitle" style="margin-bottom:12px;">Add Debt Account</h3>
+  <h3 id="accModalTitle" style="margin-bottom:14px;">Add Debt Account</h3>
   <form onsubmit="saveAccount(event)">
     <input type="hidden" id="accId" />
     <div class="form-group"><label>Account Name</label><input type="text" id="accName" required /></div>
@@ -362,14 +609,14 @@
       <div class="form-group"><label>Due Day</label><input type="number" id="accDueDay" min="1" max="31" value="25" /></div>
     </div>
     <div class="row-actions" style="justify-content:flex-end;">
-      <button type="button" onclick="document.getElementById('accountModal').close()">Cancel</button>
+      <button type="button" class="ghost" onclick="document.getElementById('accountModal').close()">Cancel</button>
       <button type="submit" class="primary">Save Account</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="challengeModal">
-  <h3 style="margin-bottom:12px;">Create Custom Challenge</h3>
+  <h3 style="margin-bottom:14px;">Create Custom Challenge</h3>
   <form onsubmit="saveChallenge(event)">
     <div class="form-group"><label>Challenge Title</label><input type="text" id="chalTitle" required /></div>
     <div class="form-group"><label>Description</label><input type="text" id="chalDesc" /></div>
@@ -385,14 +632,14 @@
     </div>
     <div class="form-group"><label>Deadline</label><input type="date" id="chalDeadline" required /></div>
     <div class="row-actions" style="justify-content:flex-end;">
-      <button type="button" onclick="document.getElementById('challengeModal').close()">Cancel</button>
+      <button type="button" class="ghost" onclick="document.getElementById('challengeModal').close()">Cancel</button>
       <button type="submit" class="primary">Create Challenge</button>
     </div>
   </form>
 </dialog>
 
 <dialog id="rewardModal">
-  <h3 style="margin-bottom:12px;">Add XP Reward</h3>
+  <h3 style="margin-bottom:14px;">Add XP Reward</h3>
   <form onsubmit="saveReward(event)">
     <div class="form-group"><label>Reward Title</label><input type="text" id="rewTitle" required /></div>
     <div class="form-row">
@@ -400,7 +647,7 @@
       <div class="form-group"><label>XP Required</label><input type="number" id="rewXp" min="100" step="50" value="500" required /></div>
     </div>
     <div class="row-actions" style="justify-content:flex-end;">
-      <button type="button" onclick="document.getElementById('rewardModal').close()">Cancel</button>
+      <button type="button" class="ghost" onclick="document.getElementById('rewardModal').close()">Cancel</button>
       <button type="submit" class="primary">Add Reward</button>
     </div>
   </form>
@@ -411,7 +658,6 @@
   import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-auth.js";
   import { getFirestore, doc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore.js";
 
-  // PASTE YOUR FIREBASE CONFIG VALUES BELOW:
   const firebaseConfig = {
     apiKey: "AIzaSyBMIN9HkgkAiwNmOa1rX3IT0lYy1eqW6jE",
     authDomain: "debtcrush-tracker.firebaseapp.com",
@@ -421,50 +667,66 @@
     appId: "1:954157067651:web:754d93af32f849da5e5ab6"
   };
 
-  const STORAGE_KEY = 'debtcrush_state_v3';
-  const DEFAULT_STATE = {
-    currency: 'ZAR', theme: 'dark', strategy: 'avalanche', extraMonthlySim: 1500,
-    selectedBalloonAccountId: 'acc_3', balloonSimExtraMonthly: 1800, balloonSimAnnualLump: 15000,
-    activeProfileId: 'HOUSEHOLD', includeJointInUserView: true,
+  // Blank safe default state (used ONLY after sign-in if Firestore has no data yet)
+  const EMPTY_STATE = {
+    currency: 'ZAR',
+    theme: 'dark',
+    strategy: 'avalanche',
+    extraMonthlySim: 1500,
+    selectedBalloonAccountId: '',
+    balloonSimExtraMonthly: 1800,
+    balloonSimAnnualLump: 15000,
+    activeProfileId: 'HOUSEHOLD',
+    includeJointInUserView: true,
+    budgetMonth: new Date().toISOString().slice(0, 7),
     profiles: [
-      { id: 'prof_1', name: 'Sphiwe', emoji: '🦁', color: '#10b981', xp: 250, unlockedTrophies: ['first_extra', 'ten_pct'] },
-      { id: 'prof_2', name: 'Bonolo', emoji: '👑', color: '#ec4899', xp: 200, unlockedTrophies: ['first_extra', 'ten_pct'] }
+      { id: 'prof_1', name: 'Sphiwe', emoji: '🦁', color: '#10b981', xp: 0, unlockedTrophies: [] },
+      { id: 'prof_2', name: 'Bonolo', emoji: '👑', color: '#ec4899', xp: 0, unlockedTrophies: [] }
     ],
-    accounts: [
-      { id: 'acc_1', name: 'FNB Premier Credit Card', category: 'Credit Card', ownerId: 'prof_1', apr: 20.75, originalBalance: 38000, currentBalance: 24500, minPayment: 1200, creditLimit: 45000, dueDay: 25, balloonAmount: 0, originalBalloonAmount: 0, remainingMonths: 0 },
-      { id: 'acc_2', name: 'Capitec Personal Loan', category: 'Personal Loan', ownerId: 'prof_2', apr: 16.5, originalBalance: 65000, currentBalance: 41200, minPayment: 2350, creditLimit: 0, dueDay: 1, balloonAmount: 0, originalBalloonAmount: 0, remainingMonths: 0 },
-      { id: 'acc_3', name: 'WesBank Vehicle Finance', category: 'Vehicle Finance', ownerId: 'JOINT', apr: 11.75, originalBalance: 350000, currentBalance: 320000, minPayment: 7450, creditLimit: 0, dueDay: 28, balloonAmount: 68000, originalBalloonAmount: 72000, remainingMonths: 42 },
-      { id: 'acc_4', name: 'Woolworths Store Card', category: 'Store Account', ownerId: 'prof_2', apr: 22, dueDay: 20, originalBalance: 9500, currentBalance: 5000, minPayment: 450, creditLimit: 12000, balloonAmount: 0, originalBalloonAmount: 0, remainingMonths: 0 }
-    ],
-    payments: [], expenses: [], challenges: [], rewards: []
+    accounts: [],
+    payments: [],
+    expenses: [],
+    monthlyIncomes: [],
+    monthlyBudgetExpenses: [],
+    challenges: [],
+    rewards: []
   };
 
-  let state = loadLocalState();
+  let state = null; // Remains null while signed out so zero values/accounts exist in memory or DOM
   let db = null, auth = null, currentUser = null, unsubscribeDoc = null, isApplyingRemote = false;
 
-  const isConfigured = firebaseConfig.apiKey && !firebaseConfig.apiKey.startsWith("YOUR_");
-  if (isConfigured) {
-    const app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
+  const app = initializeApp(firebaseConfig);
+  auth = getAuth(app);
+  db = getFirestore(app);
 
-    onAuthStateChanged(auth, (user) => {
-      currentUser = user;
-      const outEl = document.getElementById('authSignedOutControls');
-      const inEl = document.getElementById('authSignedInControls');
-      const statusEl = document.getElementById('authStatusText');
-      if (user) {
-        outEl.classList.add('hidden');
-        inEl.classList.remove('hidden');
-        document.getElementById('authUserLabel').textContent = `Signed in: ${user.email}`;
-        statusEl.textContent = '☁️ Syncing live with Cloud Firestore';
-        startFirestoreListener();
-      } else {
-        outEl.classList.remove('hidden');
-        inEl.classList.add('hidden');
-        statusEl.textContent = '☁️ Sign in above to sync across devices';
-        if (unsubscribeDoc) { unsubscribeDoc(); unsubscribeDoc = null; }
-      }
+  onAuthStateChanged(auth, (user) => {
+    currentUser = user;
+    const lockedView = document.getElementById('lockedView');
+    const appView = document.getElementById('appView');
+    const headerControls = document.getElementById('headerControls');
+
+    if (user) {
+      lockedView.classList.add('hidden');
+      appView.classList.remove('hidden');
+      headerControls.classList.remove('hidden');
+      setBadge('ok', '☁️ Connecting...');
+      startFirestoreListener();
+    } else {
+      // Signed out: wipe state from memory and hide all data views
+      if (unsubscribeDoc) { unsubscribeDoc(); unsubscribeDoc = null; }
+      state = null;
+      appView.classList.add('hidden');
+      headerControls.classList.add('hidden');
+      lockedView.classList.remove('hidden');
+      clearRenderedDom();
+      setBadge('warn', '🔒 Locked');
+    }
+  });
+
+  function clearRenderedDom() {
+    ['kpiGrid', 'accountsGrid', 'cashflowChartWrap', 'budgetKpiGrid', 'incomeList', 'budgetExpenseList', 'balloonKpis', 'balloonChartWrap', 'ledgerBody', 'profileXpGrid', 'challengesGrid', 'rewardsGrid'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.innerHTML = '';
     });
   }
 
@@ -473,48 +735,62 @@
     if (unsubscribeDoc) unsubscribeDoc();
     const docRef = doc(db, "households", "main");
     unsubscribeDoc = onSnapshot(docRef, (snap) => {
+      if (!currentUser) return;
       if (snap.exists()) {
         const remote = snap.data();
         if (remote && remote.stateData) {
           isApplyingRemote = true;
-          state = Object.assign({}, structuredClone(DEFAULT_STATE), remote.stateData);
-          writeLocalOnly(state);
+          state = Object.assign({}, structuredClone(EMPTY_STATE), remote.stateData);
+          if (!Array.isArray(state.monthlyIncomes)) state.monthlyIncomes = [];
+          if (!Array.isArray(state.monthlyBudgetExpenses)) state.monthlyBudgetExpenses = [];
           renderAll();
           isApplyingRemote = false;
-          setBadge('ok', '☁️ Cloud Sync Active');
+          setBadge('ok', `☁️ Synced (${currentUser.email.split('@')[0]})`);
         }
       } else {
+        state = structuredClone(EMPTY_STATE);
+        renderAll();
         pushToFirestore();
       }
     }, (err) => {
-      setBadge('warn', '⚠️ Cloud Read Blocked');
+      setBadge('warn', '⚠️ Cloud Access Denied');
       console.error(err);
     });
   }
 
   async function pushToFirestore() {
-    if (!db || !currentUser || isApplyingRemote) return;
+    if (!db || !currentUser || !state || isApplyingRemote) return;
     try {
       await setDoc(doc(db, "households", "main"), {
         updatedAt: new Date().toISOString(),
         updatedBy: currentUser.email,
         stateData: state
       });
-      setBadge('ok', '☁️ Saved to Cloud');
+      setBadge('ok', `☁️ Saved (${currentUser.email.split('@')[0]})`);
     } catch (err) {
       setBadge('warn', '⚠️ Cloud Save Error');
       console.error(err);
     }
   }
 
-  window.firebaseSignIn = async function() {
-    if (!auth) return alert('Paste your firebaseConfig into index.html first.');
+  function saveState() {
+    if (!currentUser || !state) return;
+    setBadge('ok', '☁️ Saving...');
+    pushToFirestore();
+  }
+
+  window.firebaseSignIn = async function(e) {
+    if (e) e.preventDefault();
     const email = document.getElementById('authEmail').value.trim();
     const pass = document.getElementById('authPassword').value;
+    const errEl = document.getElementById('authErrorMsg');
+    errEl.classList.add('hidden');
     try {
       await signInWithEmailAndPassword(auth, email, pass);
+      document.getElementById('authPassword').value = '';
     } catch (err) {
-      alert('Sign-in failed: ' + err.message);
+      errEl.textContent = 'Sign-in failed: ' + err.message;
+      errEl.classList.remove('hidden');
     }
   };
 
@@ -522,23 +798,14 @@
     if (auth) await signOut(auth);
   };
 
-  function loadLocalState() {
-    try {
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if (raw) return Object.assign({}, structuredClone(DEFAULT_STATE), JSON.parse(raw));
-    } catch (e) {}
-    return structuredClone(DEFAULT_STATE);
-  }
-
-  function writeLocalOnly(s) {
-    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(s)); } catch (e) {}
-  }
-
-  function saveState() {
-    writeLocalOnly(state);
-    setBadge('ok', currentUser ? '☁️ Syncing...' : '💾 Saved Locally');
-    pushToFirestore();
-  }
+  window.toggleMoreMenu = function(e) {
+    e.stopPropagation();
+    document.getElementById('moreMenu').classList.toggle('hidden');
+  };
+  window.closeMoreMenu = function() {
+    document.getElementById('moreMenu').classList.add('hidden');
+  };
+  document.addEventListener('click', () => closeMoreMenu());
 
   function setBadge(kind, text) {
     const el = document.getElementById('storageBadge');
@@ -551,32 +818,50 @@
   function todayStr() { return new Date().toISOString().slice(0, 10); }
   function getProfileName(id) {
     if (id === 'JOINT' || id === 'HOUSEHOLD') return 'Joint / Household';
-    const p = state.profiles.find(x => x.id === id);
+    const p = (state?.profiles || []).find(x => x.id === id);
     return p ? `${p.emoji} ${p.name}` : id;
   }
   function isVisibleForActiveProfile(ownerId) {
+    if (!state) return false;
     if (state.activeProfileId === 'HOUSEHOLD') return true;
     if (ownerId === state.activeProfileId) return true;
     if (state.includeJointInUserView && ownerId === 'JOINT') return true;
     return false;
   }
 
-  window.toggleTheme = function() { state.theme = state.theme === 'dark' ? 'light' : 'dark'; document.documentElement.className = state.theme; saveState(); };
+  window.toggleTheme = function() {
+    if (!state) return;
+    state.theme = state.theme === 'dark' ? 'light' : 'dark';
+    document.documentElement.className = state.theme;
+    saveState();
+  };
+
   window.switchTab = function(t) {
+    if (!state) return;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
-    ['dashboard', 'balloon', 'activity', 'challenges'].forEach(sec => document.getElementById('tab-' + sec).classList.toggle('hidden', sec !== t));
+    ['dashboard', 'budget', 'balloon', 'activity', 'challenges'].forEach(sec => {
+      document.getElementById('tab-' + sec).classList.toggle('hidden', sec !== t);
+    });
     renderAll();
   };
-  window.changeStrategy = function(v) { state.strategy = v; saveState(); renderAccounts(); };
+
+  window.changeStrategy = function(v) {
+    if (!state) return;
+    state.strategy = v;
+    saveState();
+    renderAccounts();
+  };
 
   function populateSelectors() {
     const pf = document.getElementById('profileFilter');
     const prev = state.activeProfileId;
-    pf.innerHTML = `<option value="HOUSEHOLD">🏠 Household (All)</option>` + state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    pf.innerHTML = `<option value="HOUSEHOLD">🏠 Household (All)</option>` +
+      state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
     pf.value = prev;
     pf.onchange = () => { state.activeProfileId = pf.value; saveState(); renderAll(); };
   }
 
+  /* ==================== 1. DEBT OVERVIEW ==================== */
   function renderKPIs() {
     const vis = state.accounts.filter(a => isVisibleForActiveProfile(a.ownerId));
     const totalDebt = vis.reduce((s, a) => s + Number(a.currentBalance || 0), 0);
@@ -589,7 +874,7 @@
     document.getElementById('kpiGrid').innerHTML = `
       <div class="card"><div class="kpi-label">Total Remaining Debt</div><div class="kpi-val">${fmt(totalDebt)}</div><div class="progress-bar"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div><div class="kpi-sub">${pct.toFixed(1)}% crushed (${fmt(paidOff)} paid)</div></div>
       <div class="card"><div class="kpi-label">🎈 Balloon Exposure</div><div class="kpi-val" style="color:var(--amber)">${fmt(totalBalloon)}</div><div class="kpi-sub">Residual lump sum due at term end</div></div>
-      <div class="card"><div class="kpi-label">Monthly Minimums</div><div class="kpi-val">${fmt(minMonthly)}</div><div class="kpi-sub">Across ${vis.length} active account(s)</div></div>
+      <div class="card"><div class="kpi-label">Monthly Debt Minimums</div><div class="kpi-val">${fmt(minMonthly)}</div><div class="kpi-sub">Across ${vis.length} active account(s)</div></div>
       <div class="card"><div class="kpi-label">Household XP</div><div class="kpi-val" style="color:var(--emerald)">${state.profiles.reduce((s, p) => s + p.xp, 0)} XP</div><div class="kpi-sub">${state.profiles.map(p => `${p.emoji} ${p.name}: ${p.xp}`).join(' · ')}</div></div>
     `;
   }
@@ -606,7 +891,7 @@
       const pct = orig > 0 ? Math.min(100, Math.max(0, ((orig - acc.currentBalance) / orig) * 100)) : 0;
       const hasBalloon = Number(acc.balloonAmount || 0) > 0;
       return `
-        <div class="card" style="background:var(--card-2);">
+        <div class="sub-card">
           <div class="flex-between">
             <div><strong>#${idx + 1} ${acc.name}</strong><div style="font-size:0.78rem; color:var(--muted);">${acc.category} · ${getProfileName(acc.ownerId)}</div></div>
             <div><span class="pill pill-blue">${acc.apr}% APR</span> ${hasBalloon ? `<span class="pill pill-amber">🎈 Balloon</span>` : ''}</div>
@@ -616,13 +901,13 @@
           <div style="font-size:0.8rem; color:var(--muted);" class="flex-between"><span>Min: <strong>${fmt(acc.minPayment)}</strong></span>${hasBalloon ? `<span>🎈 ${fmt(acc.balloonAmount)}</span>` : ''}</div>
           <div class="row-actions">
             <button class="primary" onclick="openPaymentModal('${acc.id}')">+ Pay</button>
-            <button onclick="openExpenseModal('${acc.id}')">+ Charge</button>
-            <button onclick="openAccountModal('${acc.id}')">Edit</button>
+            <button class="ghost" onclick="openExpenseModal('${acc.id}')">+ Charge</button>
+            <button class="ghost" onclick="openAccountModal('${acc.id}')">Edit</button>
             <button class="danger" onclick="deleteAccount('${acc.id}')">Delete</button>
           </div>
         </div>
       `;
-    }).join('') || `<p style="color:var(--muted);">No accounts in this view.</p>`;
+    }).join('') || `<p style="color:var(--muted);">No accounts added yet. Click "+ Account" or import your JSON backup.</p>`;
   }
 
   function renderCashflowChart() {
@@ -646,6 +931,187 @@
     document.getElementById('cashflowChartWrap').innerHTML = `<svg class="chart" viewBox="0 0 600 210"><line x1="25" y1="170" x2="580" y2="170" stroke="#334155" />${bars}</svg>`;
   }
 
+  /* ==================== 2. MONTHLY BUDGET & INCOME ==================== */
+  window.changeBudgetMonth = function(val) {
+    if (!state) return;
+    state.budgetMonth = val;
+    saveState();
+    renderBudgetTab();
+  };
+
+  function renderBudgetTab() {
+    const monthInput = document.getElementById('budgetMonthInput');
+    if (!state.budgetMonth) state.budgetMonth = new Date().toISOString().slice(0, 7);
+    monthInput.value = state.budgetMonth;
+
+    const visIncomes = state.monthlyIncomes.filter(i => isVisibleForActiveProfile(i.ownerId));
+    const visExpenses = state.monthlyBudgetExpenses.filter(e => isVisibleForActiveProfile(e.ownerId));
+
+    const totalIncome = visIncomes.reduce((s, i) => s + Number(i.amount || 0), 0);
+    const totalBudgeted = visExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
+    const totalPaid = visExpenses.filter(e => e.paid).reduce((s, e) => s + Number(e.amount || 0), 0);
+    const unpaidRemaining = Math.max(0, totalBudgeted - totalPaid);
+    const leftForMonth = totalIncome - totalBudgeted;
+
+    document.getElementById('budgetKpiGrid').innerHTML = `
+      <div class="card">
+        <div class="kpi-label">💵 Total Monthly Income</div>
+        <div class="kpi-val" style="color:var(--emerald)">${fmt(totalIncome)}</div>
+        <div class="kpi-sub">${visIncomes.length} income source(s)</div>
+      </div>
+      <div class="card">
+        <div class="kpi-label">📋 Total Planned Expenses</div>
+        <div class="kpi-val">${fmt(totalBudgeted)}</div>
+        <div class="kpi-sub">${visExpenses.filter(e => e.paid).length} of ${visExpenses.length} bills checked off</div>
+      </div>
+      <div class="card">
+        <div class="kpi-label">⏳ Unpaid Bills Left</div>
+        <div class="kpi-val" style="color:var(--amber)">${fmt(unpaidRemaining)}</div>
+        <div class="kpi-sub">${fmt(totalPaid)} already paid</div>
+      </div>
+      <div class="card">
+        <div class="kpi-label">🎯 Left For The Month</div>
+        <div class="kpi-val" style="color:${leftForMonth >= 0 ? 'var(--emerald)' : 'var(--red)'}">${fmt(leftForMonth)}</div>
+        <div class="kpi-sub">${leftForMonth >= 0 ? 'Available for extra debt attack / savings' : 'Over budget — expenses exceed income'}</div>
+      </div>
+    `;
+
+    // Render Income List
+    document.getElementById('incomeList').innerHTML = visIncomes.map(inc => `
+      <div class="budget-item">
+        <div>
+          <strong>${inc.source}</strong>
+          <div style="font-size:0.78rem; color:var(--muted);">${getProfileName(inc.ownerId)}${inc.notes ? ` · ${inc.notes}` : ''}</div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong style="color:var(--emerald);">${fmt(inc.amount)}</strong>
+          <button class="ghost" style="padding:5px 8px;" onclick="openIncomeModal('${inc.id}')">✏️</button>
+          <button class="danger" style="padding:5px 8px;" onclick="deleteIncomeItem('${inc.id}')">✕</button>
+        </div>
+      </div>
+    `).join('') || `<p style="color:var(--muted); font-size:0.86rem;">No income sources added yet. Click "+ Add Income" to enter your salary or rental income.</p>`;
+
+    // Render Expense Checklist
+    document.getElementById('budgetExpenseList').innerHTML = visExpenses.map(exp => `
+      <div class="budget-item ${exp.paid ? 'paid' : ''}">
+        <div class="budget-left">
+          <input type="checkbox" class="budget-check" ${exp.paid ? 'checked' : ''} onchange="toggleBudgetExpensePaid('${exp.id}', this.checked)" />
+          <div>
+            <div class="budget-title" style="font-weight:700;">${exp.name}</div>
+            <div style="font-size:0.76rem; color:var(--muted);">
+              ${exp.category} · ${getProfileName(exp.ownerId)}${exp.dueDay ? ` · Due ${exp.dueDay}` : ''}
+            </div>
+          </div>
+        </div>
+        <div style="display:flex; align-items:center; gap:8px;">
+          <strong>${fmt(exp.amount)}</strong>
+          <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
+          <button class="danger" style="padding:5px 8px;" onclick="deleteBudgetExpenseItem('${exp.id}')">✕</button>
+        </div>
+      </div>
+    `).join('') || `<p style="color:var(--muted); font-size:0.86rem;">No monthly expenses listed yet. Click "+ Add Expense" to build your checklist.</p>`;
+  }
+
+  window.openIncomeModal = function(id) {
+    const sel = document.getElementById('incOwnerId');
+    sel.innerHTML = `<option value="JOINT">🤝 Joint / Household</option>` + state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    const item = id ? state.monthlyIncomes.find(x => x.id === id) : null;
+    document.getElementById('incModalTitle').textContent = item ? 'Edit Income Source' : 'Add Monthly Income';
+    document.getElementById('incId').value = item ? item.id : '';
+    document.getElementById('incSource').value = item ? item.source : '';
+    sel.value = item ? item.ownerId : 'prof_1';
+    document.getElementById('incAmount').value = item ? item.amount : '';
+    document.getElementById('incNotes').value = item ? (item.notes || '') : '';
+    document.getElementById('incomeModal').showModal();
+  };
+
+  window.saveIncomeItem = function(e) {
+    e.preventDefault();
+    const id = document.getElementById('incId').value;
+    const payload = {
+      id: id || ('inc_' + Date.now()),
+      source: document.getElementById('incSource').value.trim(),
+      ownerId: document.getElementById('incOwnerId').value,
+      amount: Number(document.getElementById('incAmount').value),
+      notes: document.getElementById('incNotes').value.trim()
+    };
+    if (id) {
+      const idx = state.monthlyIncomes.findIndex(x => x.id === id);
+      if (idx > -1) state.monthlyIncomes[idx] = payload;
+    } else {
+      state.monthlyIncomes.push(payload);
+    }
+    saveState();
+    document.getElementById('incomeModal').close();
+    renderBudgetTab();
+  };
+
+  window.deleteIncomeItem = function(id) {
+    state.monthlyIncomes = state.monthlyIncomes.filter(x => x.id !== id);
+    saveState();
+    renderBudgetTab();
+  };
+
+  window.openBudgetExpenseModal = function(id) {
+    const sel = document.getElementById('bExpOwnerId');
+    sel.innerHTML = `<option value="JOINT">🤝 Joint / Household</option>` + state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    const item = id ? state.monthlyBudgetExpenses.find(x => x.id === id) : null;
+    document.getElementById('bExpModalTitle').textContent = item ? 'Edit Monthly Expense' : 'Add Monthly Expense';
+    document.getElementById('bExpId').value = item ? item.id : '';
+    document.getElementById('bExpName').value = item ? item.name : '';
+    document.getElementById('bExpCategory').value = item ? item.category : 'Housing & Utilities';
+    document.getElementById('bExpAmount').value = item ? item.amount : '';
+    sel.value = item ? item.ownerId : 'JOINT';
+    document.getElementById('bExpDueDay').value = item ? (item.dueDay || '') : '';
+    document.getElementById('budgetExpenseModal').showModal();
+  };
+
+  window.saveBudgetExpenseItem = function(e) {
+    e.preventDefault();
+    const id = document.getElementById('bExpId').value;
+    const existing = id ? state.monthlyBudgetExpenses.find(x => x.id === id) : null;
+    const payload = {
+      id: id || ('bexp_' + Date.now()),
+      name: document.getElementById('bExpName').value.trim(),
+      category: document.getElementById('bExpCategory').value,
+      amount: Number(document.getElementById('bExpAmount').value),
+      ownerId: document.getElementById('bExpOwnerId').value,
+      dueDay: document.getElementById('bExpDueDay').value ? Number(document.getElementById('bExpDueDay').value) : null,
+      paid: existing ? Boolean(existing.paid) : false
+    };
+    if (id) {
+      const idx = state.monthlyBudgetExpenses.findIndex(x => x.id === id);
+      if (idx > -1) state.monthlyBudgetExpenses[idx] = payload;
+    } else {
+      state.monthlyBudgetExpenses.push(payload);
+    }
+    saveState();
+    document.getElementById('budgetExpenseModal').close();
+    renderBudgetTab();
+  };
+
+  window.toggleBudgetExpensePaid = function(id, isChecked) {
+    const item = state.monthlyBudgetExpenses.find(x => x.id === id);
+    if (!item) return;
+    item.paid = isChecked;
+    saveState();
+    renderBudgetTab();
+  };
+
+  window.deleteBudgetExpenseItem = function(id) {
+    state.monthlyBudgetExpenses = state.monthlyBudgetExpenses.filter(x => x.id !== id);
+    saveState();
+    renderBudgetTab();
+  };
+
+  window.resetBudgetChecks = function() {
+    if (!state || !state.monthlyBudgetExpenses.length) return;
+    state.monthlyBudgetExpenses.forEach(e => e.paid = false);
+    saveState();
+    renderBudgetTab();
+  };
+
+  /* ==================== 3. BALLOON ATTACK ==================== */
   window.selectBalloonAccount = function(id) { state.selectedBalloonAccountId = id; saveState(); renderBalloonTab(); };
   function renderBalloonTab() {
     const bAccs = state.accounts.filter(a => Number(a.balloonAmount || 0) > 0);
@@ -668,7 +1134,6 @@
     const annualLump = Number(document.getElementById('simAnnualLump').value || 0);
     state.balloonSimExtraMonthly = extraMonthly;
     state.balloonSimAnnualLump = annualLump;
-    writeLocalOnly(state);
     document.getElementById('lblExtraMonthly').textContent = fmt(extraMonthly);
     document.getElementById('lblAnnualLump').textContent = fmt(annualLump);
 
@@ -688,10 +1153,10 @@
     const maxB = Math.max(1000, ...stdPts);
     const toPath = (arr) => arr.map((v, i) => `${i === 0 ? 'M' : 'L'}${(30 + (i / months) * 540).toFixed(1)},${(180 - (v / maxB) * 155).toFixed(1)}`).join(' ');
     document.getElementById('balloonKpis').innerHTML = `
-      <div class="card" style="background:var(--card-2);"><div class="kpi-label">Remaining Balloon</div><div class="kpi-val" style="color:var(--amber)">${fmt(balloon)}</div><div class="kpi-sub">${months} months left</div></div>
-      <div class="card" style="background:var(--card-2);"><div class="kpi-label">Sinking Target</div><div class="kpi-val">${fmt(sinkingNeeded)}/mo</div><div class="kpi-sub">To cover balloon cash</div></div>
-      <div class="card" style="background:var(--card-2);"><div class="kpi-label">Projected Term Balance</div><div class="kpi-val" style="color:var(--emerald)">${fmt(balAtk)}</div><div class="kpi-sub">With attack levers</div></div>
-      <div class="card" style="background:var(--card-2);"><div class="kpi-label">Annual Blitz</div><div class="kpi-val">${annualLump > 0 ? Math.ceil(balloon / annualLump) : '∞'} yrs</div><div class="kpi-sub">At ${fmt(annualLump)}/yr</div></div>
+      <div class="sub-card"><div class="kpi-label">Remaining Balloon</div><div class="kpi-val" style="color:var(--amber)">${fmt(balloon)}</div><div class="kpi-sub">${months} months left</div></div>
+      <div class="sub-card"><div class="kpi-label">Sinking Target</div><div class="kpi-val">${fmt(sinkingNeeded)}/mo</div><div class="kpi-sub">To cover balloon cash</div></div>
+      <div class="sub-card"><div class="kpi-label">Projected Term Balance</div><div class="kpi-val" style="color:var(--emerald)">${fmt(balAtk)}</div><div class="kpi-sub">With attack levers</div></div>
+      <div class="sub-card"><div class="kpi-label">Annual Blitz</div><div class="kpi-val">${annualLump > 0 ? Math.ceil(balloon / annualLump) : '∞'} yrs</div><div class="kpi-sub">At ${fmt(annualLump)}/yr</div></div>
     `;
     document.getElementById('balloonSummaryText').innerHTML = `
       <div>• <strong>Sinking Fund:</strong> ${fmt(sinkingNeeded)}/mo saves up the balloon cleanly.</div>
@@ -702,6 +1167,7 @@
   };
   window.quickLogBalloon = function() { openPaymentModal(state.selectedBalloonAccountId, 'balloon', state.balloonSimExtraMonthly || 1500); };
 
+  /* ==================== 4. LEDGER & 5. CHALLENGES ==================== */
   function renderActivity() {
     const items = [
       ...state.payments.map(p => ({ kind: 'payment', id: p.id, date: p.date, accountName: p.accountName, member: getProfileName(p.paidByProfileId), detail: `${p.type.toUpperCase()} — ${p.notes || ''}`, amount: p.amount, subType: p.type })),
@@ -710,12 +1176,12 @@
     document.getElementById('ledgerBody').innerHTML = items.map(it => `
       <tr>
         <td>${it.date}</td>
-        <td>${it.kind === 'payment' ? `<span class="pill ${it.subType === 'balloon' ? 'pill-amber' : 'pill-green'}">${it.subType === 'balloon' ? '🎈 Balloon Pay' : 'Payment'}</span>` : `<span class="pill pill-red">Expense</span>`}</td>
+        <td>${it.kind === 'payment' ? `<span class="pill ${it.subType === 'balloon' ? 'pill-amber' : 'pill-green'}">${it.subType === 'balloon' ? '🎈 Balloon Pay' : 'Payment'}</span>` : `<span class="pill pill-red">Card Charge</span>`}</td>
         <td>${it.accountName}</td><td>${it.member}</td><td>${it.detail}</td>
         <td style="font-weight:700; color:${it.kind === 'payment' ? 'var(--emerald)' : 'var(--red)'}">${it.kind === 'payment' ? '-' : '+'}${fmt(it.amount)}</td>
         <td><button class="danger" onclick="revertEntry('${it.kind}', '${it.id}')">Undo</button></td>
       </tr>
-    `).join('') || `<tr><td colspan="7" style="color:var(--muted);">No activity yet.</td></tr>`;
+    `).join('') || `<tr><td colspan="7" style="color:var(--muted);">No activity logged yet.</td></tr>`;
   }
 
   window.revertEntry = function(kind, id) {
@@ -741,8 +1207,8 @@
 
   function renderChallenges() {
     document.getElementById('profileXpGrid').innerHTML = state.profiles.map(p => `<div class="card"><div class="flex-between"><h3>${p.emoji} ${p.name}</h3><span class="pill pill-green">${p.xp} XP</span></div></div>`).join('');
-    document.getElementById('challengesGrid').innerHTML = state.challenges.map(c => `<div class="card" style="background:var(--card-2);"><div class="flex-between"><strong>${c.title}</strong><span class="pill pill-amber">+${c.xp} XP</span></div><div class="row-actions"><button class="primary" onclick="completeChallenge('${c.id}')">Complete</button><button class="danger" onclick="deleteChallenge('${c.id}')">Remove</button></div></div>`).join('');
-    document.getElementById('rewardsGrid').innerHTML = state.rewards.map(r => `<div class="card" style="background:var(--card-2);"><div class="flex-between"><strong>🎁 ${r.title}</strong><span class="pill pill-blue">${r.xpReq} XP</span></div><div class="row-actions"><button class="primary" onclick="claimReward('${r.id}')">${r.claimed ? 'Claimed' : 'Claim'}</button></div></div>`).join('');
+    document.getElementById('challengesGrid').innerHTML = state.challenges.map(c => `<div class="sub-card"><div class="flex-between"><strong>${c.title}</strong><span class="pill pill-amber">+${c.xp} XP</span></div><div class="row-actions"><button class="primary" onclick="completeChallenge('${c.id}')">Complete</button><button class="danger" onclick="deleteChallenge('${c.id}')">Remove</button></div></div>`).join('') || `<p style="color:var(--muted);">No challenges yet.</p>`;
+    document.getElementById('rewardsGrid').innerHTML = state.rewards.map(r => `<div class="sub-card"><div class="flex-between"><strong>🎁 ${r.title}</strong><span class="pill pill-blue">${r.xpReq} XP</span></div><div class="row-actions"><button class="primary" onclick="claimReward('${r.id}')">${r.claimed ? 'Claimed' : 'Claim'}</button></div></div>`).join('') || `<p style="color:var(--muted);">No rewards yet.</p>`;
   }
 
   window.completeChallenge = function(id) { const c = state.challenges.find(x => x.id === id); if (c && !c.completed) { c.completed = true; state.profiles.forEach(p => p.xp += Math.round(c.xp / state.profiles.length)); saveState(); renderAll(); } };
@@ -751,6 +1217,7 @@
   window.addPresetChallenge = function(preset) { state.challenges.push({ id: 'chal_' + Date.now(), title: preset === 'balloon' ? '🎈 Balloon Starter: R1,500' : '🚫 30-Day No-Spend', ownerId: 'JOINT', type: 'amount', target: 1500, current: 0, xp: 300, deadline: todayStr(), completed: false }); saveState(); renderAll(); };
 
   window.openPaymentModal = function(accId, type = 'regular', amount = '') {
+    if (!state.accounts.length) return alert('Add a debt account first.');
     document.getElementById('payAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
     if (accId) document.getElementById('payAccountId').value = accId;
     document.getElementById('payProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
@@ -777,6 +1244,7 @@
   };
 
   window.openExpenseModal = function(accId) {
+    if (!state.accounts.length) return alert('Add a debt account first.');
     document.getElementById('expAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
     if (accId) document.getElementById('expAccountId').value = accId;
     document.getElementById('expProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
@@ -805,6 +1273,7 @@
     document.getElementById('accOwnerId').innerHTML = `<option value="JOINT">🤝 Joint Account</option>` + state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
     document.getElementById('accId').value = id || '';
     const a = id ? state.accounts.find(x => x.id === id) : null;
+    document.getElementById('accModalTitle').textContent = a ? 'Edit Debt Account' : 'Add Debt Account';
     document.getElementById('accName').value = a ? a.name : '';
     document.getElementById('accCategory').value = a ? a.category : 'Vehicle Finance';
     document.getElementById('accOwnerId').value = a ? a.ownerId : 'JOINT';
@@ -850,6 +1319,7 @@
   window.saveReward = function(e) { e.preventDefault(); state.rewards.push({ id: 'rew_' + Date.now(), title: document.getElementById('rewTitle').value, ownerId: 'JOINT', xpReq: Number(document.getElementById('rewXp').value), claimed: false }); saveState(); document.getElementById('rewardModal').close(); renderAll(); };
 
   window.exportJSON = function() {
+    if (!state) return;
     const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
@@ -859,14 +1329,17 @@
 
   window.importJSON = function(e) {
     const file = e.target.files[0];
-    if (!file) return;
+    if (!file || !currentUser) return;
     const reader = new FileReader();
     reader.onload = (ev) => {
       try {
-        state = Object.assign({}, structuredClone(DEFAULT_STATE), JSON.parse(ev.target.result));
+        const parsed = JSON.parse(ev.target.result);
+        state = Object.assign({}, structuredClone(EMPTY_STATE), parsed);
+        if (!Array.isArray(state.monthlyIncomes)) state.monthlyIncomes = [];
+        if (!Array.isArray(state.monthlyBudgetExpenses)) state.monthlyBudgetExpenses = [];
         saveState();
         renderAll();
-        alert('Backup imported and synced!');
+        alert('Backup imported and synced to Cloud!');
       } catch (err) { alert('Invalid JSON file.'); }
     };
     reader.readAsText(file);
@@ -874,11 +1347,17 @@
   };
 
   function renderAll() {
+    if (!state || !currentUser) return;
     document.documentElement.className = state.theme || 'dark';
-    populateSelectors(); renderKPIs(); renderAccounts(); renderCashflowChart(); renderBalloonTab(); renderActivity(); renderChallenges();
+    populateSelectors();
+    renderKPIs();
+    renderAccounts();
+    renderCashflowChart();
+    renderBudgetTab();
+    renderBalloonTab();
+    renderActivity();
+    renderChallenges();
   }
-
-  renderAll();
 </script>
 </body>
 </html>
