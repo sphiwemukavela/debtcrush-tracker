@@ -501,10 +501,10 @@
   <h3 id="bExpModalTitle" style="margin-bottom:14px;">Add Monthly Budget Expense</h3>
   <form onsubmit="saveBudgetExpenseItem(event)">
     <input type="hidden" id="bExpId" />
-    <div class="form-group"><label>Expense Name</label><input type="text" id="bExpName" placeholder="e.g., Bond / Rent, Electricity, Groceries" required /></div>
+    <div class="form-group"><label>Expense Name</label><input type="text" id="bExpName" placeholder="e.g., Bond / Rent, Electricity, Adhoc Repairs" required /></div>
     <div class="form-row">
       <div class="form-group"><label>Category</label>
-        <select id="bExpCategory">
+        <select id="bExpCategory" onchange="toggleAdhocBudgetFields()">
           <option>Housing & Utilities</option>
           <option>Debt & Finance</option>
           <option>Groceries & Household</option>
@@ -512,10 +512,15 @@
           <option>Insurance & Medical</option>
           <option>Family & Kids</option>
           <option>Subscriptions & Internet</option>
+          <option value="Adhoc">Adhoc</option>
           <option>Other</option>
         </select>
       </div>
-      <div class="form-group"><label>Budgeted Amount (R)</label><input type="number" id="bExpAmount" step="0.01" min="0" required /></div>
+      <div class="form-group" id="bExpStandardAmountGroup"><label>Budgeted Amount (R)</label><input type="number" id="bExpAmount" step="0.01" min="0" /></div>
+    </div>
+    <div class="form-row hidden" id="bExpAdhocFields">
+      <div class="form-group"><label>Estimated Budget (R)</label><input type="number" id="bExpEstimatedAmount" step="0.01" min="0" placeholder="0.00" /></div>
+      <div class="form-group"><label>Actual Budget (R) — Counts to Total</label><input type="number" id="bExpActualAmount" step="0.01" min="0" placeholder="0.00" /></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Assigned To</label><select id="bExpOwnerId"></select></div>
@@ -1045,9 +1050,16 @@
     const visIncomes = state.monthlyIncomes.filter(i => isVisibleForActiveProfile(i.ownerId));
     const visExpenses = state.monthlyBudgetExpenses.filter(e => isVisibleForActiveProfile(e.ownerId));
 
+    const getEffectiveExpenseAmount = (e) => {
+      if ((e.category || '').toLowerCase() === 'adhoc') {
+        return Number(e.actualAmount ?? e.amount ?? 0);
+      }
+      return Number(e.amount || 0);
+    };
+
     const totalIncome = visIncomes.reduce((s, i) => s + Number(i.amount || 0), 0);
-    const totalBudgeted = visExpenses.reduce((s, e) => s + Number(e.amount || 0), 0);
-    const totalPaid = visExpenses.filter(e => e.paid).reduce((s, e) => s + Number(e.amount || 0), 0);
+    const totalBudgeted = visExpenses.reduce((s, e) => s + getEffectiveExpenseAmount(e), 0);
+    const totalPaid = visExpenses.filter(e => e.paid).reduce((s, e) => s + getEffectiveExpenseAmount(e), 0);
     const unpaidRemaining = Math.max(0, totalBudgeted - totalPaid);
     const leftForMonth = totalIncome - totalBudgeted;
 
@@ -1091,11 +1103,19 @@
 
     // Render Expense Checklist
     document.getElementById('budgetExpenseList').innerHTML = visExpenses.map(exp => {
+      const isAdhoc = (exp.category || '').toLowerCase() === 'adhoc';
+      const effectiveAmt = getEffectiveExpenseAmount(exp);
+      const estAmt = Number(exp.estimatedAmount || 0);
       const dueReached = exp.dueDay ? isDueDayReachedForMonth(exp.dueDay, state.budgetMonth) : false;
       const badges = [
         exp.linkedAccountId ? `<span class="pill pill-blue">🔗 Debt Sync</span>` : '',
+        isAdhoc ? `<span class="pill pill-amber">Adhoc</span>` : '',
         exp.dueDay ? `<span class="pill ${dueReached ? 'pill-green' : 'pill-amber'}">Due ${exp.dueDay}${dueReached ? ' · Reached' : ''}</span>` : ''
       ].filter(Boolean).join(' ');
+
+      const subDetail = isAdhoc
+        ? `${exp.category} · ${getProfileName(exp.ownerId)} · Est: ${fmt(estAmt)} | Actual: ${fmt(effectiveAmt)}`
+        : `${exp.category} · ${getProfileName(exp.ownerId)}`;
 
       return `
         <div class="budget-item ${exp.paid ? 'paid' : ''}">
@@ -1104,12 +1124,15 @@
             <div>
               <div class="budget-title" style="font-weight:700;">${exp.name} ${badges}</div>
               <div style="font-size:0.76rem; color:var(--muted);">
-                ${exp.category} · ${getProfileName(exp.ownerId)}
+                ${subDetail}
               </div>
             </div>
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
-            <strong>${fmt(exp.amount)}</strong>
+            <div style="text-align:right;">
+              <strong>${fmt(effectiveAmt)}</strong>
+              ${isAdhoc ? `<div style="font-size:0.7rem; color:var(--muted);">Est: ${fmt(estAmt)}</div>` : ''}
+            </div>
             <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
             <button class="danger" style="padding:5px 8px;" onclick="deleteBudgetExpenseItem('${exp.id}')">✕</button>
           </div>
@@ -1158,6 +1181,22 @@
     renderBudgetTab();
   };
 
+  window.toggleAdhocBudgetFields = function() {
+    const cat = (document.getElementById('bExpCategory').value || '').toLowerCase();
+    const isAdhoc = cat === 'adhoc';
+    const stdGroup = document.getElementById('bExpStandardAmountGroup');
+    const adhocGroup = document.getElementById('bExpAdhocFields');
+    const stdInput = document.getElementById('bExpAmount');
+    const estInput = document.getElementById('bExpEstimatedAmount');
+    const actInput = document.getElementById('bExpActualAmount');
+
+    stdGroup.classList.toggle('hidden', isAdhoc);
+    adhocGroup.classList.toggle('hidden', !isAdhoc);
+    stdInput.required = !isAdhoc;
+    estInput.required = isAdhoc;
+    actInput.required = isAdhoc;
+  };
+
   window.openBudgetExpenseModal = function(id) {
     const sel = document.getElementById('bExpOwnerId');
     sel.innerHTML = `<option value="JOINT">🤝 Joint / Household</option>` + state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
@@ -1165,8 +1204,13 @@
     document.getElementById('bExpModalTitle').textContent = item ? 'Edit Monthly Expense' : 'Add Monthly Expense';
     document.getElementById('bExpId').value = item ? item.id : '';
     document.getElementById('bExpName').value = item ? item.name : '';
-    document.getElementById('bExpCategory').value = item ? item.category : 'Housing & Utilities';
-    document.getElementById('bExpAmount').value = item ? item.amount : '';
+    const catVal = item ? (item.category || 'Housing & Utilities') : 'Housing & Utilities';
+    document.getElementById('bExpCategory').value = catVal;
+    const isAdhoc = catVal.toLowerCase() === 'adhoc';
+    document.getElementById('bExpAmount').value = item && !isAdhoc ? item.amount : '';
+    document.getElementById('bExpEstimatedAmount').value = item && isAdhoc ? (item.estimatedAmount ?? '') : '';
+    document.getElementById('bExpActualAmount').value = item && isAdhoc ? (item.actualAmount ?? item.amount ?? '') : '';
+    toggleAdhocBudgetFields();
     sel.value = item ? item.ownerId : 'JOINT';
     document.getElementById('bExpDueDay').value = item ? (item.dueDay || '') : '';
     document.getElementById('budgetExpenseModal').showModal();
@@ -1177,15 +1221,21 @@
     const id = document.getElementById('bExpId').value;
     const existing = id ? state.monthlyBudgetExpenses.find(x => x.id === id) : null;
     const dueDayVal = document.getElementById('bExpDueDay').value ? Number(document.getElementById('bExpDueDay').value) : null;
-    const amtVal = Number(document.getElementById('bExpAmount').value);
+    const categoryVal = document.getElementById('bExpCategory').value;
+    const isAdhoc = categoryVal.toLowerCase() === 'adhoc';
+    const estVal = isAdhoc ? Number(document.getElementById('bExpEstimatedAmount').value || 0) : null;
+    const actVal = isAdhoc ? Number(document.getElementById('bExpActualAmount').value || 0) : null;
+    const amtVal = isAdhoc ? actVal : Number(document.getElementById('bExpAmount').value || 0);
     const ownerVal = document.getElementById('bExpOwnerId').value;
 
     const payload = {
       id: id || ('bexp_' + Date.now()),
       linkedAccountId: existing ? existing.linkedAccountId : null,
       name: document.getElementById('bExpName').value.trim(),
-      category: document.getElementById('bExpCategory').value,
+      category: categoryVal,
       amount: amtVal,
+      estimatedAmount: estVal,
+      actualAmount: actVal,
       ownerId: ownerVal,
       dueDay: dueDayVal,
       paid: existing ? Boolean(existing.paid) : false,
