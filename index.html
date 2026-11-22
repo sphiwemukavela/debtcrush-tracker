@@ -317,7 +317,7 @@
       <div class="flex-between" style="margin-bottom:16px;">
         <div>
           <h3>Debt Accounts</h3>
-          <p style="font-size:0.82rem; color:var(--muted);">Ordered by your chosen payoff strategy</p>
+          <p style="font-size:0.82rem; color:var(--muted);">Ordered by your chosen payoff strategy · Minimum payments auto-sync to Monthly Budget</p>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <select id="strategySelect" onchange="changeStrategy(this.value)">
@@ -348,7 +348,7 @@
       <div class="flex-between">
         <div>
           <h2>💰 Monthly Income & Expense Checklist</h2>
-          <p style="color:var(--muted); font-size:0.85rem;">Track monthly income, tick off bills as you pay them, and see what remains.</p>
+          <p style="color:var(--muted); font-size:0.85rem;">Interlinked with Debt Accounts: minimum payments appear automatically and tick off when their due day is reached.</p>
         </div>
         <div style="display:flex; gap:8px; align-items:center;">
           <input type="month" id="budgetMonthInput" onchange="changeBudgetMonth(this.value)" />
@@ -377,7 +377,7 @@
         <div class="flex-between" style="margin-bottom:14px;">
           <div>
             <h3>✅ Monthly Expenses Checklist</h3>
-            <p style="font-size:0.8rem; color:var(--muted);">Check each item once paid for the month</p>
+            <p style="font-size:0.8rem; color:var(--muted);">Auto-ticks on due day or check manually when paid</p>
           </div>
           <button class="amber" onclick="openBudgetExpenseModal()">+ Add Expense</button>
         </div>
@@ -519,7 +519,7 @@
     </div>
     <div class="form-row">
       <div class="form-group"><label>Assigned To</label><select id="bExpOwnerId"></select></div>
-      <div class="form-group"><label>Due Day (optional)</label><input type="number" id="bExpDueDay" min="1" max="31" placeholder="e.g., 1" /></div>
+      <div class="form-group"><label>Due Day (1–31, auto-ticks when reached)</label><input type="number" id="bExpDueDay" min="1" max="31" placeholder="e.g., 25" /></div>
     </div>
     <div class="row-actions" style="justify-content:flex-end;">
       <button type="button" class="ghost" onclick="document.getElementById('budgetExpenseModal').close()">Cancel</button>
@@ -606,7 +606,7 @@
     </div>
     <div class="form-row">
       <div class="form-group"><label>Credit Limit (R)</label><input type="number" id="accLimit" step="0.01" min="0" value="0" /></div>
-      <div class="form-group"><label>Due Day</label><input type="number" id="accDueDay" min="1" max="31" value="25" /></div>
+      <div class="form-group"><label>Due Day (1–31)</label><input type="number" id="accDueDay" min="1" max="31" value="25" /></div>
     </div>
     <div class="row-actions" style="justify-content:flex-end;">
       <button type="button" class="ghost" onclick="document.getElementById('accountModal').close()">Cancel</button>
@@ -743,9 +743,11 @@
           state = Object.assign({}, structuredClone(EMPTY_STATE), remote.stateData);
           if (!Array.isArray(state.monthlyIncomes)) state.monthlyIncomes = [];
           if (!Array.isArray(state.monthlyBudgetExpenses)) state.monthlyBudgetExpenses = [];
+          const changed = runInterlinkAndAutoTick();
           renderAll();
           isApplyingRemote = false;
           setBadge('ok', `☁️ Synced (${currentUser.email.split('@')[0]})`);
+          if (changed) pushToFirestore();
         }
       } else {
         state = structuredClone(EMPTY_STATE);
@@ -829,6 +831,100 @@
     return false;
   }
 
+  /* ==================== INTERLINKING & AUTO-TICK ENGINE ==================== */
+  function syncAccountWithBudgetExpense(acc) {
+    if (!state || !acc) return false;
+    let changed = false;
+    const minPay = Number(acc.minPayment || 0);
+    const dueDay = acc.dueDay ? Number(acc.dueDay) : null;
+    const existingIdx = state.monthlyBudgetExpenses.findIndex(e => e.linkedAccountId === acc.id);
+
+    if (minPay > 0) {
+      const desiredName = `${acc.name} (Min Payment)`;
+      if (existingIdx > -1) {
+        const exp = state.monthlyBudgetExpenses[existingIdx];
+        if (
+          exp.name !== desiredName ||
+          Number(exp.amount) !== minPay ||
+          exp.ownerId !== acc.ownerId ||
+          exp.dueDay !== dueDay ||
+          exp.category !== 'Debt & Finance'
+        ) {
+          exp.name = desiredName;
+          exp.category = 'Debt & Finance';
+          exp.amount = minPay;
+          exp.ownerId = acc.ownerId;
+          exp.dueDay = dueDay;
+          changed = true;
+        }
+      } else {
+        state.monthlyBudgetExpenses.push({
+          id: 'bexp_acc_' + acc.id,
+          linkedAccountId: acc.id,
+          name: desiredName,
+          category: 'Debt & Finance',
+          amount: minPay,
+          ownerId: acc.ownerId,
+          dueDay: dueDay,
+          paid: false,
+          autoTickedForMonth: null
+        });
+        changed = true;
+      }
+    } else if (existingIdx > -1) {
+      state.monthlyBudgetExpenses.splice(existingIdx, 1);
+      changed = true;
+    }
+    return changed;
+  }
+
+  function isDueDayReachedForMonth(dueDay, targetYearMonth) {
+    if (!dueDay || dueDay < 1 || dueDay > 31) return false;
+    const now = new Date();
+    const curYM = now.toISOString().slice(0, 7);
+    const curDay = now.getDate();
+    const activeYM = targetYearMonth || state.budgetMonth || curYM;
+
+    if (activeYM < curYM) return true; // Past month: due day has passed
+    if (activeYM > curYM) return false; // Future month: not yet reached
+    return curDay >= Number(dueDay); // Current month: true once today >= dueDay
+  }
+
+  function applyDueDayAutoTick(targetYearMonth) {
+    if (!state) return false;
+    const now = new Date();
+    const activeYM = targetYearMonth || state.budgetMonth || now.toISOString().slice(0, 7);
+    let changed = false;
+
+    for (const exp of state.monthlyBudgetExpenses) {
+      if (!exp.dueDay) continue;
+      if (isDueDayReachedForMonth(exp.dueDay, activeYM)) {
+        if (exp.autoTickedForMonth !== activeYM) {
+          exp.paid = true;
+          exp.autoTickedForMonth = activeYM;
+          changed = true;
+        }
+      }
+    }
+    return changed;
+  }
+
+  function runInterlinkAndAutoTick() {
+    if (!state) return false;
+    let changed = false;
+    for (const acc of state.accounts) {
+      if (syncAccountWithBudgetExpense(acc)) changed = true;
+    }
+    // Clean up orphan linked expenses if account no longer exists
+    const validIds = new Set(state.accounts.map(a => a.id));
+    const beforeLen = state.monthlyBudgetExpenses.length;
+    state.monthlyBudgetExpenses = state.monthlyBudgetExpenses.filter(e => !e.linkedAccountId || validIds.has(e.linkedAccountId));
+    if (state.monthlyBudgetExpenses.length !== beforeLen) changed = true;
+
+    if (applyDueDayAutoTick(state.budgetMonth)) changed = true;
+    return changed;
+  }
+
   window.toggleTheme = function() {
     if (!state) return;
     state.theme = state.theme === 'dark' ? 'light' : 'dark';
@@ -874,7 +970,7 @@
     document.getElementById('kpiGrid').innerHTML = `
       <div class="card"><div class="kpi-label">Total Remaining Debt</div><div class="kpi-val">${fmt(totalDebt)}</div><div class="progress-bar"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div><div class="kpi-sub">${pct.toFixed(1)}% crushed (${fmt(paidOff)} paid)</div></div>
       <div class="card"><div class="kpi-label">🎈 Balloon Exposure</div><div class="kpi-val" style="color:var(--amber)">${fmt(totalBalloon)}</div><div class="kpi-sub">Residual lump sum due at term end</div></div>
-      <div class="card"><div class="kpi-label">Monthly Debt Minimums</div><div class="kpi-val">${fmt(minMonthly)}</div><div class="kpi-sub">Across ${vis.length} active account(s)</div></div>
+      <div class="card"><div class="kpi-label">Monthly Debt Minimums</div><div class="kpi-val">${fmt(minMonthly)}</div><div class="kpi-sub">Synced to Monthly Budget (${vis.length} acct)</div></div>
       <div class="card"><div class="kpi-label">Household XP</div><div class="kpi-val" style="color:var(--emerald)">${state.profiles.reduce((s, p) => s + p.xp, 0)} XP</div><div class="kpi-sub">${state.profiles.map(p => `${p.emoji} ${p.name}: ${p.xp}`).join(' · ')}</div></div>
     `;
   }
@@ -893,7 +989,7 @@
       return `
         <div class="sub-card">
           <div class="flex-between">
-            <div><strong>#${idx + 1} ${acc.name}</strong><div style="font-size:0.78rem; color:var(--muted);">${acc.category} · ${getProfileName(acc.ownerId)}</div></div>
+            <div><strong>#${idx + 1} ${acc.name}</strong><div style="font-size:0.78rem; color:var(--muted);">${acc.category} · ${getProfileName(acc.ownerId)}${acc.dueDay ? ` · Due Day ${acc.dueDay}` : ''}</div></div>
             <div><span class="pill pill-blue">${acc.apr}% APR</span> ${hasBalloon ? `<span class="pill pill-amber">🎈 Balloon</span>` : ''}</div>
           </div>
           <div style="margin-top:10px;" class="flex-between"><span style="font-size:1.25rem; font-weight:800;">${fmt(acc.currentBalance)}</span><span style="font-size:0.8rem; color:var(--muted);">of ${fmt(orig)} (${pct.toFixed(1)}%)</span></div>
@@ -935,6 +1031,7 @@
   window.changeBudgetMonth = function(val) {
     if (!state) return;
     state.budgetMonth = val;
+    applyDueDayAutoTick(val);
     saveState();
     renderBudgetTab();
   };
@@ -943,6 +1040,7 @@
     const monthInput = document.getElementById('budgetMonthInput');
     if (!state.budgetMonth) state.budgetMonth = new Date().toISOString().slice(0, 7);
     monthInput.value = state.budgetMonth;
+    applyDueDayAutoTick(state.budgetMonth);
 
     const visIncomes = state.monthlyIncomes.filter(i => isVisibleForActiveProfile(i.ownerId));
     const visExpenses = state.monthlyBudgetExpenses.filter(e => isVisibleForActiveProfile(e.ownerId));
@@ -992,24 +1090,32 @@
     `).join('') || `<p style="color:var(--muted); font-size:0.86rem;">No income sources added yet. Click "+ Add Income" to enter your salary or rental income.</p>`;
 
     // Render Expense Checklist
-    document.getElementById('budgetExpenseList').innerHTML = visExpenses.map(exp => `
-      <div class="budget-item ${exp.paid ? 'paid' : ''}">
-        <div class="budget-left">
-          <input type="checkbox" class="budget-check" ${exp.paid ? 'checked' : ''} onchange="toggleBudgetExpensePaid('${exp.id}', this.checked)" />
-          <div>
-            <div class="budget-title" style="font-weight:700;">${exp.name}</div>
-            <div style="font-size:0.76rem; color:var(--muted);">
-              ${exp.category} · ${getProfileName(exp.ownerId)}${exp.dueDay ? ` · Due ${exp.dueDay}` : ''}
+    document.getElementById('budgetExpenseList').innerHTML = visExpenses.map(exp => {
+      const dueReached = exp.dueDay ? isDueDayReachedForMonth(exp.dueDay, state.budgetMonth) : false;
+      const badges = [
+        exp.linkedAccountId ? `<span class="pill pill-blue">🔗 Debt Sync</span>` : '',
+        exp.dueDay ? `<span class="pill ${dueReached ? 'pill-green' : 'pill-amber'}">Due ${exp.dueDay}${dueReached ? ' · Reached' : ''}</span>` : ''
+      ].filter(Boolean).join(' ');
+
+      return `
+        <div class="budget-item ${exp.paid ? 'paid' : ''}">
+          <div class="budget-left">
+            <input type="checkbox" class="budget-check" ${exp.paid ? 'checked' : ''} onchange="toggleBudgetExpensePaid('${exp.id}', this.checked)" />
+            <div>
+              <div class="budget-title" style="font-weight:700;">${exp.name} ${badges}</div>
+              <div style="font-size:0.76rem; color:var(--muted);">
+                ${exp.category} · ${getProfileName(exp.ownerId)}
+              </div>
             </div>
           </div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <strong>${fmt(exp.amount)}</strong>
+            <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
+            <button class="danger" style="padding:5px 8px;" onclick="deleteBudgetExpenseItem('${exp.id}')">✕</button>
+          </div>
         </div>
-        <div style="display:flex; align-items:center; gap:8px;">
-          <strong>${fmt(exp.amount)}</strong>
-          <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
-          <button class="danger" style="padding:5px 8px;" onclick="deleteBudgetExpenseItem('${exp.id}')">✕</button>
-        </div>
-      </div>
-    `).join('') || `<p style="color:var(--muted); font-size:0.86rem;">No monthly expenses listed yet. Click "+ Add Expense" to build your checklist.</p>`;
+      `;
+    }).join('') || `<p style="color:var(--muted); font-size:0.86rem;">No monthly expenses listed yet. Click "+ Add Expense" or add a debt account with a minimum payment.</p>`;
   }
 
   window.openIncomeModal = function(id) {
@@ -1070,43 +1176,76 @@
     e.preventDefault();
     const id = document.getElementById('bExpId').value;
     const existing = id ? state.monthlyBudgetExpenses.find(x => x.id === id) : null;
+    const dueDayVal = document.getElementById('bExpDueDay').value ? Number(document.getElementById('bExpDueDay').value) : null;
+    const amtVal = Number(document.getElementById('bExpAmount').value);
+    const ownerVal = document.getElementById('bExpOwnerId').value;
+
     const payload = {
       id: id || ('bexp_' + Date.now()),
+      linkedAccountId: existing ? existing.linkedAccountId : null,
       name: document.getElementById('bExpName').value.trim(),
       category: document.getElementById('bExpCategory').value,
-      amount: Number(document.getElementById('bExpAmount').value),
-      ownerId: document.getElementById('bExpOwnerId').value,
-      dueDay: document.getElementById('bExpDueDay').value ? Number(document.getElementById('bExpDueDay').value) : null,
-      paid: existing ? Boolean(existing.paid) : false
+      amount: amtVal,
+      ownerId: ownerVal,
+      dueDay: dueDayVal,
+      paid: existing ? Boolean(existing.paid) : false,
+      autoTickedForMonth: existing ? (existing.autoTickedForMonth || null) : null
     };
+
     if (id) {
       const idx = state.monthlyBudgetExpenses.findIndex(x => x.id === id);
       if (idx > -1) state.monthlyBudgetExpenses[idx] = payload;
     } else {
       state.monthlyBudgetExpenses.push(payload);
     }
+
+    // Interlink back to linked debt account if applicable
+    if (payload.linkedAccountId) {
+      const acc = state.accounts.find(a => a.id === payload.linkedAccountId);
+      if (acc) {
+        acc.minPayment = amtVal;
+        acc.ownerId = ownerVal;
+        if (dueDayVal) acc.dueDay = dueDayVal;
+      }
+    }
+
+    applyDueDayAutoTick(state.budgetMonth);
     saveState();
     document.getElementById('budgetExpenseModal').close();
-    renderBudgetTab();
+    renderAll();
   };
 
   window.toggleBudgetExpensePaid = function(id, isChecked) {
     const item = state.monthlyBudgetExpenses.find(x => x.id === id);
     if (!item) return;
     item.paid = isChecked;
+    // Mark current budgetMonth as handled so unchecking stays unchecked for this month
+    if (!isChecked && item.dueDay) {
+      item.autoTickedForMonth = state.budgetMonth || new Date().toISOString().slice(0, 7);
+    }
     saveState();
     renderBudgetTab();
   };
 
   window.deleteBudgetExpenseItem = function(id) {
+    const item = state.monthlyBudgetExpenses.find(x => x.id === id);
     state.monthlyBudgetExpenses = state.monthlyBudgetExpenses.filter(x => x.id !== id);
+    // If linked to an account and deleted from budget, zero out minPayment so it doesn't recreate on next sync
+    if (item && item.linkedAccountId) {
+      const acc = state.accounts.find(a => a.id === item.linkedAccountId);
+      if (acc) acc.minPayment = 0;
+    }
     saveState();
-    renderBudgetTab();
+    renderAll();
   };
 
   window.resetBudgetChecks = function() {
     if (!state || !state.monthlyBudgetExpenses.length) return;
-    state.monthlyBudgetExpenses.forEach(e => e.paid = false);
+    const activeYM = state.budgetMonth || new Date().toISOString().slice(0, 7);
+    state.monthlyBudgetExpenses.forEach(e => {
+      e.paid = false;
+      e.autoTickedForMonth = activeYM;
+    });
     saveState();
     renderBudgetTab();
   };
@@ -1309,10 +1448,16 @@
       const idx = state.accounts.findIndex(a => a.id === id);
       if (idx > -1) state.accounts[idx] = payload;
     } else state.accounts.push(payload);
+
+    runInterlinkAndAutoTick();
     saveState(); document.getElementById('accountModal').close(); renderAll();
   };
 
-  window.deleteAccount = function(id) { state.accounts = state.accounts.filter(a => a.id !== id); saveState(); renderAll(); };
+  window.deleteAccount = function(id) {
+    state.accounts = state.accounts.filter(a => a.id !== id);
+    state.monthlyBudgetExpenses = state.monthlyBudgetExpenses.filter(e => e.linkedAccountId !== id);
+    saveState(); renderAll();
+  };
   window.openChallengeModal = function() { document.getElementById('chalOwner').innerHTML = `<option value="JOINT">🤝 Joint</option>`; document.getElementById('chalDeadline').value = todayStr(); document.getElementById('challengeModal').showModal(); };
   window.saveChallenge = function(e) { e.preventDefault(); state.challenges.push({ id: 'chal_' + Date.now(), title: document.getElementById('chalTitle').value, desc: document.getElementById('chalDesc').value, type: document.getElementById('chalType').value, target: Number(document.getElementById('chalTarget').value), current: 0, ownerId: 'JOINT', xp: Number(document.getElementById('chalXp').value), deadline: document.getElementById('chalDeadline').value, completed: false }); saveState(); document.getElementById('challengeModal').close(); renderAll(); };
   window.openRewardModal = function() { document.getElementById('rewOwner').innerHTML = `<option value="JOINT">🤝 Joint</option>`; document.getElementById('rewardModal').showModal(); };
@@ -1337,6 +1482,7 @@
         state = Object.assign({}, structuredClone(EMPTY_STATE), parsed);
         if (!Array.isArray(state.monthlyIncomes)) state.monthlyIncomes = [];
         if (!Array.isArray(state.monthlyBudgetExpenses)) state.monthlyBudgetExpenses = [];
+        runInterlinkAndAutoTick();
         saveState();
         renderAll();
         alert('Backup imported and synced to Cloud!');
