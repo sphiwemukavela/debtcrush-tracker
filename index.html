@@ -1,0 +1,1419 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>DebtCrush — Offline Joint Debt & Balloon Attack Tracker</title>
+  <style>
+    :root {
+      --bg: #0b1120;
+      --card: #111827;
+      --card-2: #1f2937;
+      --border: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --emerald: #10b981;
+      --emerald-dim: rgba(16, 185, 129, 0.15);
+      --pink: #ec4899;
+      --amber: #f59e0b;
+      --amber-dim: rgba(245, 158, 11, 0.15);
+      --red: #ef4444;
+      --red-dim: rgba(239, 68, 68, 0.15);
+      --blue: #3b82f6;
+      --blue-dim: rgba(59, 130, 246, 0.15);
+    }
+    html.light {
+      --bg: #f1f5f9;
+      --card: #ffffff;
+      --card-2: #f8fafc;
+      --border: #cbd5e1;
+      --text: #0f172a;
+      --muted: #475569;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding-bottom: 60px;
+    }
+    .container { max-width: 1200px; margin: 0 auto; padding: 16px; }
+    header {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 16px;
+      position: sticky;
+      top: 0;
+      z-index: 50;
+    }
+    .header-inner {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 12px;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; font-weight: 800; font-size: 1.2rem; }
+    .badge {
+      font-size: 0.72rem;
+      padding: 3px 8px;
+      border-radius: 999px;
+      font-weight: 600;
+      border: 1px solid var(--border);
+      background: var(--card-2);
+    }
+    .badge.ok { color: var(--emerald); border-color: rgba(16,185,129,0.4); background: var(--emerald-dim); }
+    .badge.warn { color: var(--amber); border-color: rgba(245,158,11,0.4); background: var(--amber-dim); }
+    .controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    button, select, input {
+      font-family: inherit;
+      font-size: 0.875rem;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: var(--card-2);
+      color: var(--text);
+      padding: 7px 12px;
+    }
+    button { cursor: pointer; font-weight: 600; transition: opacity 0.15s; }
+    button:hover { opacity: 0.9; }
+    button.primary { background: var(--emerald); color: #052e16; border-color: var(--emerald); }
+    button.amber { background: var(--amber); color: #451a03; border-color: var(--amber); }
+    button.danger { background: var(--red-dim); color: #fca5a5; border-color: rgba(239,68,68,0.4); }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      overflow-x: auto;
+      margin: 18px 0;
+      padding-bottom: 4px;
+    }
+    .tab-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 9px 16px;
+      border-radius: 10px;
+      white-space: nowrap;
+    }
+    .tab-btn.active {
+      background: var(--emerald);
+      color: #052e16;
+      border-color: var(--emerald);
+    }
+    .grid { display: grid; gap: 16px; }
+    .grid-4 { grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
+    .grid-2 { grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 18px;
+    }
+    .kpi-label { font-size: 0.78rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+    .kpi-val { font-size: 1.65rem; font-weight: 800; margin-top: 4px; }
+    .kpi-sub { font-size: 0.8rem; color: var(--muted); margin-top: 4px; }
+    .progress-bar {
+      width: 100%;
+      height: 10px;
+      background: var(--card-2);
+      border-radius: 999px;
+      overflow: hidden;
+      margin: 10px 0;
+    }
+    .progress-fill { height: 100%; background: var(--emerald); transition: width 0.3s; }
+    .progress-fill.amber { background: var(--amber); }
+    .flex-between { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .stack { display: flex; flex-direction: column; gap: 12px; }
+    .row-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); }
+    th { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; }
+    .pill {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 0.72rem;
+      font-weight: 700;
+    }
+    .pill-green { background: var(--emerald-dim); color: var(--emerald); }
+    .pill-amber { background: var(--amber-dim); color: var(--amber); }
+    .pill-red { background: var(--red-dim); color: var(--red); }
+    .pill-blue { background: var(--blue-dim); color: var(--blue); }
+    dialog {
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 22px;
+      max-width: 480px;
+      width: 92%;
+      margin: auto;
+    }
+    dialog::backdrop { background: rgba(0,0,0,0.7); }
+    .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .form-group label { font-size: 0.82rem; color: var(--muted); font-weight: 600; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .hidden { display: none !important; }
+    svg.chart { width: 100%; height: 220px; display: block; }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="header-inner">
+    <div class="brand">
+      <span>💥 DebtCrush</span>
+      <span id="storageBadge" class="badge ok">💾 Checking Storage...</span>
+    </div>
+    <div class="controls">
+      <select id="profileFilter" title="Active Profile View">
+        <option value="HOUSEHOLD">🏠 Household (All)</option>
+      </select>
+      <button class="primary" onclick="openPaymentModal()">+ Log Payment</button>
+      <button class="amber" onclick="openExpenseModal()">💳 Log Expense</button>
+      <button onclick="openAccountModal()">+ Account</button>
+      <button onclick="exportJSON()">⬇️ Export JSON</button>
+      <button onclick="document.getElementById('importFile').click()">⬆️ Import JSON</button>
+      <input type="file" id="importFile" accept=".json" class="hidden" onchange="importJSON(event)" />
+      <button onclick="toggleTheme()" title="Toggle Theme">🌓</button>
+    </div>
+  </div>
+</header>
+
+<div class="container">
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard & Accounts</button>
+    <button class="tab-btn" data-tab="balloon" onclick="switchTab('balloon')">🎈 Balloon Attack</button>
+    <button class="tab-btn" data-tab="activity" onclick="switchTab('activity')">📜 Activity & Cashflow</button>
+    <button class="tab-btn" data-tab="challenges" onclick="switchTab('challenges')">🏆 Challenges & Rewards</button>
+  </div>
+
+  <!-- DASHBOARD TAB -->
+  <section id="tab-dashboard" class="stack">
+    <div class="grid grid-4" id="kpiGrid"></div>
+
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:12px;">
+        <h3>Active Debt Accounts</h3>
+        <div style="display:flex; gap:8px; align-items:center;">
+          <span style="font-size:0.82rem; color:var(--muted);">Strategy:</span>
+          <select id="strategySelect" onchange="changeStrategy(this.value)">
+            <option value="avalanche">Avalanche (Highest APR)</option>
+            <option value="snowball">Snowball (Lowest Balance)</option>
+            <option value="balloon">Balloon Attack First</option>
+          </select>
+        </div>
+      </div>
+      <div class="grid grid-2" id="accountsGrid"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom:8px;">6-Month Repayments vs. New Card Charges</h3>
+      <p style="font-size:0.82rem; color:var(--muted); margin-bottom:12px;">Green bars show total debt payments logged; red bars show new credit/store card expenses.</p>
+      <div id="cashflowChartWrap"></div>
+    </div>
+  </section>
+
+  <!-- BALLOON ATTACK TAB -->
+  <section id="tab-balloon" class="stack hidden">
+    <div class="card">
+      <div class="flex-between">
+        <div>
+          <h2>🎈 Vehicle Balloon Attack Simulator</h2>
+          <p style="color:var(--muted); font-size:0.86rem;">Eliminate the lump-sum residual cliff before contract maturity.</p>
+        </div>
+        <select id="balloonAccountSelect" onchange="selectBalloonAccount(this.value)"></select>
+      </div>
+
+      <div id="balloonEmpty" class="hidden" style="padding:24px 0; color:var(--muted);">
+        No accounts currently have a balloon/residual amount set. Edit an account or add a vehicle loan with a balloon payment to use this simulator.
+      </div>
+
+      <div id="balloonContent" class="stack" style="margin-top:16px;">
+        <div class="grid grid-4" id="balloonKpis"></div>
+
+        <div class="grid grid-2">
+          <div class="card" style="background:var(--card-2);">
+            <h4>Attack Levers</h4>
+            <div class="form-group" style="margin-top:10px;">
+              <label>Extra Monthly Overpayment / Sinking Contribution (<span id="lblExtraMonthly">R 0</span>)</label>
+              <input type="range" id="simExtraMonthly" min="0" max="15000" step="250" oninput="updateBalloonSim()" />
+            </div>
+            <div class="form-group">
+              <label>Annual Lump-Sum Strike (Bonus / Tax Refund) (<span id="lblAnnualLump">R 0</span>)</label>
+              <input type="range" id="simAnnualLump" min="0" max="100000" step="2500" oninput="updateBalloonSim()" />
+            </div>
+            <div class="row-actions">
+              <button class="amber" onclick="quickLogBalloon()">🎈 Log Balloon Sinking Payment Now</button>
+            </div>
+          </div>
+
+          <div class="card" style="background:var(--card-2);">
+            <h4>Strategy Breakdown</h4>
+            <div id="balloonSummaryText" class="stack" style="margin-top:10px; font-size:0.9rem;"></div>
+          </div>
+        </div>
+
+        <div class="card" style="background:var(--card-2);">
+          <h4 style="margin-bottom:8px;">Balloon Runway Projection (Standard Cliff vs. Attack Curve)</h4>
+          <div id="balloonChartWrap"></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ACTIVITY TAB -->
+  <section id="tab-activity" class="stack hidden">
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:12px;">
+        <h3>Unified Activity Ledger (Payments & Expenses)</h3>
+        <div style="display:flex; gap:8px;">
+          <button class="primary" onclick="openPaymentModal()">+ Payment</button>
+          <button class="amber" onclick="openExpenseModal()">+ Expense</button>
+        </div>
+      </div>
+      <div style="overflow-x:auto;">
+        <table>
+          <thead>
+            <tr>
+              <th>Date</th>
+              <th>Type</th>
+              <th>Account</th>
+              <th>Member</th>
+              <th>Category / Notes</th>
+              <th>Amount</th>
+              <th>Action</th>
+            </tr>
+          </thead>
+          <tbody id="ledgerBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- CHALLENGES & REWARDS TAB -->
+  <section id="tab-challenges" class="stack hidden">
+    <div class="grid grid-2" id="profileXpGrid"></div>
+
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:12px;">
+        <h3>Active Challenges</h3>
+        <div style="display:flex; gap:8px; flex-wrap:wrap;">
+          <button onclick="addPresetChallenge('balloon')">+ 🎈 Balloon Starter</button>
+          <button onclick="addPresetChallenge('nospend')">+ 🚫 30-Day No-Spend</button>
+          <button onclick="openChallengeModal()">+ Custom Challenge</button>
+        </div>
+      </div>
+      <div class="grid grid-2" id="challengesGrid"></div>
+    </div>
+
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:12px;">
+        <h3>XP Rewards Store</h3>
+        <button onclick="openRewardModal()">+ Add Reward</button>
+      </div>
+      <div class="grid grid-2" id="rewardsGrid"></div>
+    </div>
+  </section>
+</div>
+
+<!-- PAYMENT MODAL -->
+<dialog id="paymentModal">
+  <h3 style="margin-bottom:12px;">Log Debt Payment</h3>
+  <form onsubmit="savePayment(event)">
+    <div class="form-group">
+      <label>Account</label>
+      <select id="payAccountId" required></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Paid By</label>
+        <select id="payProfileId" required></select>
+      </div>
+      <div class="form-group">
+        <label>Payment Type</label>
+        <select id="payType">
+          <option value="regular">Regular Installment</option>
+          <option value="extra">Extra Principal Attack</option>
+          <option value="balloon">🎈 Balloon Sinking / Reduction</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Amount (R)</label>
+        <input type="number" id="payAmount" step="0.01" min="1" required />
+      </div>
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="payDate" required />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Notes</label>
+      <input type="text" id="payNotes" placeholder="e.g., Extra principal transfer" />
+    </div>
+    <div class="row-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('paymentModal').close()">Cancel</button>
+      <button type="submit" class="primary">Save Payment</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- EXPENSE MODAL -->
+<dialog id="expenseModal">
+  <h3 style="margin-bottom:12px;">💳 Log Card / Account Expense</h3>
+  <form onsubmit="saveExpense(event)">
+    <div class="form-group">
+      <label>Card / Account</label>
+      <select id="expAccountId" required></select>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Spent By</label>
+        <select id="expProfileId" required></select>
+      </div>
+      <div class="form-group">
+        <label>Nature</label>
+        <select id="expSpendType">
+          <option value="essential">Essential Need</option>
+          <option value="discretionary">Discretionary / Want</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Category</label>
+        <select id="expCategory">
+          <option>Groceries</option>
+          <option>Fuel & Auto</option>
+          <option>Utilities & Bills</option>
+          <option>Dining & Family</option>
+          <option>Emergency / Medical</option>
+          <option>Shopping</option>
+          <option>Other</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Amount (R)</label>
+        <input type="number" id="expAmount" step="0.01" min="1" required />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Date</label>
+        <input type="date" id="expDate" required />
+      </div>
+      <div class="form-group">
+        <label>Merchant / Note</label>
+        <input type="text" id="expNotes" placeholder="e.g., Checkers groceries" />
+      </div>
+    </div>
+    <div class="row-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('expenseModal').close()">Cancel</button>
+      <button type="submit" class="amber">Log Expense</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- ACCOUNT MODAL -->
+<dialog id="accountModal">
+  <h3 id="accModalTitle" style="margin-bottom:12px;">Add Debt Account</h3>
+  <form onsubmit="saveAccount(event)">
+    <input type="hidden" id="accId" />
+    <div class="form-group">
+      <label>Account Name</label>
+      <input type="text" id="accName" required placeholder="e.g., WesBank Vehicle Finance" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Category</label>
+        <select id="accCategory">
+          <option>Vehicle Finance</option>
+          <option>Credit Card</option>
+          <option>Personal Loan</option>
+          <option>Store Account</option>
+          <option>Home Loan</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Owner</label>
+        <select id="accOwnerId"></select>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Original Balance (R)</label>
+        <input type="number" id="accOrigBal" step="0.01" min="0" required />
+      </div>
+      <div class="form-group">
+        <label>Current Balance (R)</label>
+        <input type="number" id="accCurrBal" step="0.01" min="0" required />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Interest Rate (APR %)</label>
+        <input type="number" id="accApr" step="0.01" min="0" required />
+      </div>
+      <div class="form-group">
+        <label>Min Monthly Payment (R)</label>
+        <input type="number" id="accMinPay" step="0.01" min="0" required />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>🎈 Balloon / Residual (R)</label>
+        <input type="number" id="accBalloon" step="0.01" min="0" value="0" />
+      </div>
+      <div class="form-group">
+        <label>Months to Balloon</label>
+        <input type="number" id="accMonths" step="1" min="0" value="0" />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Credit Limit (R, optional)</label>
+        <input type="number" id="accLimit" step="0.01" min="0" value="0" />
+      </div>
+      <div class="form-group">
+        <label>Due Day of Month</label>
+        <input type="number" id="accDueDay" min="1" max="31" value="25" />
+      </div>
+    </div>
+    <div class="row-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('accountModal').close()">Cancel</button>
+      <button type="submit" class="primary">Save Account</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- CHALLENGE MODAL -->
+<dialog id="challengeModal">
+  <h3 style="margin-bottom:12px;">Create Custom Challenge</h3>
+  <form onsubmit="saveChallenge(event)">
+    <div class="form-group">
+      <label>Challenge Title</label>
+      <input type="text" id="chalTitle" required placeholder="e.g., Pay R3,000 extra on credit card" />
+    </div>
+    <div class="form-group">
+      <label>Description</label>
+      <input type="text" id="chalDesc" placeholder="Details..." />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Type</label>
+        <select id="chalType">
+          <option value="amount">Extra Payment Target (R)</option>
+          <option value="balloon_amount">🎈 Balloon Sinking Target (R)</option>
+          <option value="habit">No-Spend Habit Streak</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Target Amount (R) or 1 for Habit</label>
+        <input type="number" id="chalTarget" min="1" value="2000" required />
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Assigned To</label>
+        <select id="chalOwner"></select>
+      </div>
+      <div class="form-group">
+        <label>XP Reward</label>
+        <input type="number" id="chalXp" min="50" step="50" value="300" required />
+      </div>
+    </div>
+    <div class="form-group">
+      <label>Deadline</label>
+      <input type="date" id="chalDeadline" required />
+    </div>
+    <div class="row-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('challengeModal').close()">Cancel</button>
+      <button type="submit" class="primary">Create Challenge</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- REWARD MODAL -->
+<dialog id="rewardModal">
+  <h3 style="margin-bottom:12px;">Add XP Reward</h3>
+  <form onsubmit="saveReward(event)">
+    <div class="form-group">
+      <label>Reward Title</label>
+      <input type="text" id="rewTitle" required placeholder="e.g., Weekend Braai & Movie Night" />
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Owner</label>
+        <select id="rewOwner"></select>
+      </div>
+      <div class="form-group">
+        <label>XP Required</label>
+        <input type="number" id="rewXp" min="100" step="50" value="500" required />
+      </div>
+    </div>
+    <div class="row-actions" style="justify-content:flex-end;">
+      <button type="button" onclick="document.getElementById('rewardModal').close()">Cancel</button>
+      <button type="submit" class="primary">Add Reward</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const STORAGE_KEY = 'debtcrush_state_v3';
+
+const DEFAULT_STATE = {
+  currency: 'ZAR',
+  theme: 'dark',
+  strategy: 'avalanche',
+  extraMonthlySim: 1500,
+  selectedBalloonAccountId: 'acc_3',
+  balloonSimExtraMonthly: 1800,
+  balloonSimAnnualLump: 15000,
+  activeProfileId: 'HOUSEHOLD',
+  includeJointInUserView: true,
+  profiles: [
+    { id: 'prof_1', name: 'Sphiwe', emoji: '🦁', color: '#10b981', xp: 250, unlockedTrophies: ['first_extra', 'ten_pct'] },
+    { id: 'prof_2', name: 'Bonolo', emoji: '👑', color: '#ec4899', xp: 200, unlockedTrophies: ['first_extra', 'ten_pct'] }
+  ],
+  accounts: [
+    { id: 'acc_1', name: 'FNB Premier Credit Card', category: 'Credit Card', ownerId: 'prof_1', apr: 20.75, originalBalance: 38000, currentBalance: 24500, minPayment: 1200, creditLimit: 45000, dueDay: 25, balloonAmount: 0, originalBalloonAmount: 0, remainingMonths: 0 },
+    { id: 'acc_2', name: 'Capitec Personal Loan', category: 'Personal Loan', ownerId: 'prof_2', apr: 16.5, originalBalance: 65000, currentBalance: 41200, minPayment: 2350, creditLimit: 0, dueDay: 1, balloonAmount: 0, originalBalloonAmount: 0, remainingMonths: 0 },
+    { id: 'acc_3', name: 'WesBank Vehicle Finance', category: 'Vehicle Finance', ownerId: 'JOINT', apr: 11.75, originalBalance: 350000, currentBalance: 320000, minPayment: 7450, creditLimit: 0, dueDay: 28, balloonAmount: 68000, originalBalloonAmount: 72000, remainingMonths: 42 },
+    { id: 'acc_4', name: 'Woolworths Store Card', category: 'Store Account', ownerId: 'prof_2', apr: 22, dueDay: 20, originalBalance: 9500, currentBalance: 5000, minPayment: 450, creditLimit: 12000, balloonAmount: 0, originalBalloonAmount: 0, remainingMonths: 0 }
+  ],
+  payments: [
+    { id: 'pay_1', accountId: 'acc_1', accountName: 'FNB Premier Credit Card', paidByProfileId: 'prof_1', type: 'extra', amount: 1250, date: '2026-11-05', notes: 'Side project extra principal attack' },
+    { id: 'pay_2', accountId: 'acc_2', accountName: 'Capitec Personal Loan', paidByProfileId: 'prof_2', type: 'regular', amount: 2350, date: '2026-10-24', notes: 'Monthly debit order' },
+    { id: 'pay_3', accountId: 'acc_3', accountName: 'WesBank Vehicle Finance', paidByProfileId: 'prof_1', type: 'balloon', amount: 2000, date: '2026-11-05', notes: 'Balloon sinking fund transfer' }
+  ],
+  expenses: [
+    { id: 'exp_1', accountId: 'acc_1', accountName: 'FNB Premier Credit Card', spentByProfileId: 'prof_1', category: 'Groceries', spendType: 'essential', amount: 1450, date: '2026-11-09', notes: 'Checkers monthly pantry & essentials' },
+    { id: 'exp_2', accountId: 'acc_4', accountName: 'Woolworths Store Card', spentByProfileId: 'prof_2', category: 'Dining & Family', spendType: 'discretionary', amount: 420, date: '2026-10-24', notes: 'Weekend family lunch' }
+  ],
+  challenges: [
+    { id: 'chal_1', title: 'Monthly R2,000 Extra Principal Attack', desc: 'Pay R2,000 above minimum installments across any high-APR account this month.', ownerId: 'JOINT', type: 'amount', target: 2000, current: 1250, xp: 350, deadline: '2026-11-29', completed: false, streakBroken: false },
+    { id: 'chal_2', title: '🎈 Balloon Sinking Starter: R2,500', desc: 'Transfer R2,500 toward your Vehicle Balloon residual this month.', ownerId: 'JOINT', type: 'balloon_amount', target: 2500, current: 2000, xp: 400, deadline: '2026-11-29', completed: false, streakBroken: false },
+    { id: 'chal_3', title: '30-Day No Discretionary Card Spend', desc: 'Zero discretionary swipes on credit or store cards for the entire month.', ownerId: 'prof_1', type: 'habit', target: 1, current: 0, xp: 250, deadline: '2026-11-29', completed: false, streakBroken: false }
+  ],
+  rewards: [
+    { id: 'rew_1', title: 'Couple Date Night: Sushi & Movie', ownerId: 'JOINT', xpReq: 500, claimed: false },
+    { id: 'rew_2', title: 'New Running Shoes (Guilt-Free)', ownerId: 'prof_1', xpReq: 1000, claimed: false },
+    { id: 'rew_3', title: 'Spa Morning & Brunch Treat', ownerId: 'prof_2', xpReq: 1000, claimed: false }
+  ]
+};
+
+let state = loadState();
+
+function loadState() {
+  let raw = null;
+  let source = 'none';
+  try {
+    raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) source = 'localStorage';
+  } catch (e) {}
+
+  if (!raw) {
+    try {
+      raw = sessionStorage.getItem(STORAGE_KEY);
+      if (raw) source = 'sessionStorage';
+    } catch (e) {}
+  }
+
+  if (!raw && window.name && window.name.startsWith('DEBTCRUSH:')) {
+    raw = window.name.slice('DEBTCRUSH:'.length);
+    source = 'window.name';
+  }
+
+  updateStorageBadge(source);
+  if (raw) {
+    try {
+      const parsed = JSON.parse(raw);
+      return Object.assign({}, structuredClone(DEFAULT_STATE), parsed);
+    } catch (e) {}
+  }
+  return structuredClone(DEFAULT_STATE);
+}
+
+function saveState() {
+  const serialized = JSON.stringify(state);
+  let savedLocal = false;
+  try {
+    localStorage.setItem(STORAGE_KEY, serialized);
+    savedLocal = true;
+  } catch (e) {}
+  try {
+    sessionStorage.setItem(STORAGE_KEY, serialized);
+  } catch (e) {}
+  try {
+    window.name = 'DEBTCRUSH:' + serialized;
+  } catch (e) {}
+  updateStorageBadge(savedLocal ? 'localStorage' : 'fallback');
+}
+
+function updateStorageBadge(mode) {
+  const el = document.getElementById('storageBadge');
+  if (!el) return;
+  if (mode === 'localStorage') {
+    el.className = 'badge ok';
+    el.textContent = '💾 Saved (LocalStorage)';
+  } else if (mode === 'none') {
+    el.className = 'badge ok';
+    el.textContent = '💾 Ready (Default Seed)';
+  } else {
+    el.className = 'badge warn';
+    el.textContent = '⚠️ Fallback Storage Active';
+  }
+}
+
+function fmt(n) {
+  const val = Number(n || 0);
+  return 'R ' + val.toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
+function todayStr() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function getProfileName(id) {
+  if (id === 'JOINT' || id === 'HOUSEHOLD') return 'Joint / Household';
+  const p = state.profiles.find(x => x.id === id);
+  return p ? `${p.emoji} ${p.name}` : id;
+}
+
+function isVisibleForActiveProfile(ownerId) {
+  if (state.activeProfileId === 'HOUSEHOLD') return true;
+  if (ownerId === state.activeProfileId) return true;
+  if (state.includeJointInUserView && ownerId === 'JOINT') return true;
+  return false;
+}
+
+function toggleTheme() {
+  state.theme = state.theme === 'dark' ? 'light' : 'dark';
+  document.documentElement.className = state.theme;
+  saveState();
+}
+
+function switchTab(tabName) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tabName));
+  ['dashboard', 'balloon', 'activity', 'challenges'].forEach(t => {
+    document.getElementById('tab-' + t).classList.toggle('hidden', t !== tabName);
+  });
+  renderAll();
+}
+
+function changeStrategy(val) {
+  state.strategy = val;
+  saveState();
+  renderAccounts();
+}
+
+function populateSelectors() {
+  const pf = document.getElementById('profileFilter');
+  const prev = state.activeProfileId;
+  pf.innerHTML = `<option value="HOUSEHOLD">🏠 Household (All)</option>` +
+    state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+  pf.value = prev;
+  pf.onchange = () => {
+    state.activeProfileId = pf.value;
+    saveState();
+    renderAll();
+  };
+}
+
+function renderKPIs() {
+  const visibleAccounts = state.accounts.filter(a => isVisibleForActiveProfile(a.ownerId));
+  const totalDebt = visibleAccounts.reduce((s, a) => s + Number(a.currentBalance || 0), 0);
+  const totalOrig = visibleAccounts.reduce((s, a) => s + Math.max(Number(a.originalBalance || 0), Number(a.currentBalance || 0)), 0);
+  const paidOff = Math.max(0, totalOrig - totalDebt);
+  const pct = totalOrig > 0 ? Math.min(100, (paidOff / totalOrig) * 100) : 0;
+  const totalBalloon = visibleAccounts.reduce((s, a) => s + Number(a.balloonAmount || 0), 0);
+  const minMonthly = visibleAccounts.reduce((s, a) => s + Number(a.minPayment || 0), 0);
+
+  document.getElementById('kpiGrid').innerHTML = `
+    <div class="card">
+      <div class="kpi-label">Total Remaining Debt</div>
+      <div class="kpi-val">${fmt(totalDebt)}</div>
+      <div class="progress-bar"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
+      <div class="kpi-sub">${pct.toFixed(1)}% crushed (${fmt(paidOff)} paid down)</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">🎈 Balloon Exposure</div>
+      <div class="kpi-val" style="color:var(--amber)">${fmt(totalBalloon)}</div>
+      <div class="kpi-sub">Residual lump sum due at term end</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Monthly Minimums</div>
+      <div class="kpi-val">${fmt(minMonthly)}</div>
+      <div class="kpi-sub">Across ${visibleAccounts.length} active account(s)</div>
+    </div>
+    <div class="card">
+      <div class="kpi-label">Household XP</div>
+      <div class="kpi-val" style="color:var(--emerald)">${state.profiles.reduce((s, p) => s + p.xp, 0)} XP</div>
+      <div class="kpi-sub">${state.profiles.map(p => `${p.emoji} ${p.name}: ${p.xp}`).join(' · ')}</div>
+    </div>
+  `;
+}
+
+function renderAccounts() {
+  let list = state.accounts.filter(a => isVisibleForActiveProfile(a.ownerId));
+  if (state.strategy === 'avalanche') list.sort((a, b) => b.apr - a.apr);
+  else if (state.strategy === 'snowball') list.sort((a, b) => a.currentBalance - b.currentBalance);
+  else if (state.strategy === 'balloon') list.sort((a, b) => (b.balloonAmount || 0) - (a.balloonAmount || 0));
+
+  document.getElementById('strategySelect').value = state.strategy;
+
+  document.getElementById('accountsGrid').innerHTML = list.map((acc, idx) => {
+    const orig = Math.max(acc.originalBalance || 0, acc.currentBalance || 0);
+    const pct = orig > 0 ? Math.min(100, Math.max(0, ((orig - acc.currentBalance) / orig) * 100)) : 0;
+    const hasBalloon = Number(acc.balloonAmount || 0) > 0;
+    const amortizing = Math.max(0, acc.currentBalance - (acc.balloonAmount || 0));
+    const sinkingTarget = hasBalloon && acc.remainingMonths > 0 ? acc.balloonAmount / acc.remainingMonths : 0;
+
+    return `
+      <div class="card" style="background:var(--card-2);">
+        <div class="flex-between">
+          <div>
+            <strong>#${idx + 1} ${acc.name}</strong>
+            <div style="font-size:0.78rem; color:var(--muted);">${acc.category} · ${getProfileName(acc.ownerId)} · Due day ${acc.dueDay || 25}</div>
+          </div>
+          <div style="text-align:right;">
+            <span class="pill pill-blue">${acc.apr}% APR</span>
+            ${hasBalloon ? `<span class="pill pill-amber">🎈 Balloon</span>` : ''}
+          </div>
+        </div>
+        <div style="margin-top:10px;" class="flex-between">
+          <span style="font-size:1.25rem; font-weight:800;">${fmt(acc.currentBalance)}</span>
+          <span style="font-size:0.8rem; color:var(--muted);">of ${fmt(orig)} (${pct.toFixed(1)}%)</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
+        <div style="font-size:0.8rem; color:var(--muted);" class="flex-between">
+          <span>Min Payment: <strong>${fmt(acc.minPayment)}</strong></span>
+          ${acc.creditLimit > 0 ? `<span>Limit: ${fmt(acc.creditLimit)}</span>` : ''}
+        </div>
+        ${hasBalloon ? `
+          <div style="margin-top:8px; padding:8px; border-radius:8px; background:var(--amber-dim); font-size:0.8rem;">
+            🎈 <strong>Balloon Residual:</strong> ${fmt(acc.balloonAmount)} · Amortizing: ${fmt(amortizing)}<br/>
+            🎯 <strong>Sinking Target:</strong> ${fmt(sinkingTarget)}/mo over ${acc.remainingMonths} mos
+          </div>
+        ` : ''}
+        <div class="row-actions">
+          <button class="primary" onclick="openPaymentModal('${acc.id}')">+ Pay</button>
+          <button onclick="openExpenseModal('${acc.id}')">+ Charge</button>
+          <button onclick="openAccountModal('${acc.id}')">Edit</button>
+          <button class="danger" onclick="deleteAccount('${acc.id}')">Delete</button>
+        </div>
+      </div>
+    `;
+  }).join('') || `<p style="color:var(--muted);">No accounts in this view. Click "+ Account" to add one.</p>`;
+}
+
+function renderCashflowChart() {
+  const months = [];
+  const now = new Date();
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const key = d.toISOString().slice(0, 7);
+    const label = d.toLocaleString('en-US', { month: 'short' });
+    const paySum = state.payments.filter(p => (p.date || '').startsWith(key)).reduce((s, p) => s + Number(p.amount || 0), 0);
+    const expSum = state.expenses.filter(e => (e.date || '').startsWith(key)).reduce((s, e) => s + Number(e.amount || 0), 0);
+    months.push({ key, label, paySum, expSum });
+  }
+  const maxVal = Math.max(1000, ...months.map(m => Math.max(m.paySum, m.expSum)));
+  const bars = months.map((m, i) => {
+    const x = 40 + i * 90;
+    const hPay = (m.paySum / maxVal) * 140;
+    const hExp = (m.expSum / maxVal) * 140;
+    return `
+      <rect x="${x}" y="${170 - hPay}" width="26" height="${hPay}" rx="4" fill="#10b981" />
+      <rect x="${x + 30}" y="${170 - hExp}" width="26" height="${hExp}" rx="4" fill="#ef4444" />
+      <text x="${x + 28}" y="192" text-anchor="middle" fill="#94a3b8" font-size="12">${m.label}</text>
+    `;
+  }).join('');
+
+  document.getElementById('cashflowChartWrap').innerHTML = `
+    <svg class="chart" viewBox="0 0 600 210">
+      <line x1="25" y1="170" x2="580" y2="170" stroke="#334155" />
+      ${bars}
+    </svg>
+  `;
+}
+
+function selectBalloonAccount(id) {
+  state.selectedBalloonAccountId = id;
+  saveState();
+  renderBalloonTab();
+}
+
+function renderBalloonTab() {
+  const balloonAccounts = state.accounts.filter(a => Number(a.balloonAmount || 0) > 0);
+  const sel = document.getElementById('balloonAccountSelect');
+  sel.innerHTML = balloonAccounts.map(a => `<option value="${a.id}">${a.name} (${fmt(a.balloonAmount)} balloon)</option>`).join('');
+
+  if (balloonAccounts.length === 0) {
+    document.getElementById('balloonEmpty').classList.remove('hidden');
+    document.getElementById('balloonContent').classList.add('hidden');
+    return;
+  }
+  document.getElementById('balloonEmpty').classList.add('hidden');
+  document.getElementById('balloonContent').classList.remove('hidden');
+
+  if (!balloonAccounts.some(a => a.id === state.selectedBalloonAccountId)) {
+    state.selectedBalloonAccountId = balloonAccounts[0].id;
+  }
+  sel.value = state.selectedBalloonAccountId;
+
+  document.getElementById('simExtraMonthly').value = state.balloonSimExtraMonthly || 0;
+  document.getElementById('simAnnualLump').value = state.balloonSimAnnualLump || 0;
+  updateBalloonSim();
+}
+
+function updateBalloonSim() {
+  const acc = state.accounts.find(a => a.id === state.selectedBalloonAccountId);
+  if (!acc) return;
+  const extraMonthly = Number(document.getElementById('simExtraMonthly').value || 0);
+  const annualLump = Number(document.getElementById('simAnnualLump').value || 0);
+  state.balloonSimExtraMonthly = extraMonthly;
+  state.balloonSimAnnualLump = annualLump;
+  saveState();
+
+  document.getElementById('lblExtraMonthly').textContent = fmt(extraMonthly);
+  document.getElementById('lblAnnualLump').textContent = fmt(annualLump);
+
+  const months = Math.max(1, Number(acc.remainingMonths || 36));
+  const balloon = Number(acc.balloonAmount || 0);
+  const origBalloon = Math.max(balloon, Number(acc.originalBalloonAmount || balloon));
+  const sinkingNeeded = balloon / months;
+  const r = (Number(acc.apr || 0) / 100) / 12;
+
+  // Simulate standard vs attack balance curve
+  let balStd = Number(acc.currentBalance || 0);
+  let balAtk = Number(acc.currentBalance || 0);
+  const stdPts = [balStd];
+  const atkPts = [balAtk];
+  let payoffMonth = null;
+
+  for (let m = 1; m <= months; m++) {
+    balStd = Math.max(balloon, balStd * (1 + r) - Number(acc.minPayment || 0));
+    stdPts.push(balStd);
+
+    if (balAtk > 0) {
+      const lump = (m % 12 === 0) ? annualLump : 0;
+      balAtk = Math.max(0, balAtk * (1 + r) - (Number(acc.minPayment || 0) + extraMonthly + lump));
+      if (balAtk === 0 && payoffMonth === null) payoffMonth = m;
+    }
+    atkPts.push(balAtk);
+  }
+
+  const endBalloonRemaining = Math.max(0, balAtk);
+  const annualStrikesNeeded = annualLump > 0 ? Math.ceil(balloon / annualLump) : '∞';
+
+  document.getElementById('balloonKpis').innerHTML = `
+    <div class="card" style="background:var(--card-2);">
+      <div class="kpi-label">Remaining Balloon</div>
+      <div class="kpi-val" style="color:var(--amber)">${fmt(balloon)}</div>
+      <div class="kpi-sub">Down from ${fmt(origBalloon)}</div>
+    </div>
+    <div class="card" style="background:var(--card-2);">
+      <div class="kpi-label">Pure Sinking Target</div>
+      <div class="kpi-val">${fmt(sinkingNeeded)}/mo</div>
+      <div class="kpi-sub">Over ${months} remaining months</div>
+    </div>
+    <div class="card" style="background:var(--card-2);">
+      <div class="kpi-label">Projected Balance at Term</div>
+      <div class="kpi-val" style="color:${endBalloonRemaining === 0 ? 'var(--emerald)' : 'var(--amber)'}">${fmt(endBalloonRemaining)}</div>
+      <div class="kpi-sub">${payoffMonth ? `Full payoff in ${payoffMonth} mos!` : `Cliff reduced by ${fmt(Math.max(0, balloon - endBalloonRemaining))}`}</div>
+    </div>
+    <div class="card" style="background:var(--card-2);">
+      <div class="kpi-label">Lump-Sum Blitz</div>
+      <div class="kpi-val">${annualStrikesNeeded} yrs</div>
+      <div class="kpi-sub">At ${fmt(annualLump)}/yr bonus strike</div>
+    </div>
+  `;
+
+  document.getElementById('balloonSummaryText').innerHTML = `
+    <div>• <strong>Mode 1 (Sinking Fund):</strong> Save <strong>${fmt(sinkingNeeded)}/mo</strong> so you have 100% cash on hand at month ${months} without refinancing.</div>
+    <div>• <strong>Mode 2 (Direct Principal Overpayment):</strong> Adding <strong>${fmt(extraMonthly)}/mo</strong> directly to principal lowers interest every month and shrinks the residual cliff.</div>
+    <div>• <strong>Mode 3 (Annual Lump-Sum Blitz):</strong> Applying <strong>${fmt(annualLump)}/yr</strong> wipes out the balloon in <strong>${annualStrikesNeeded} annual strike(s)</strong>.</div>
+  `;
+
+  const maxB = Math.max(1000, ...stdPts);
+  const toPath = (arr) => arr.map((v, i) => {
+    const x = 30 + (i / months) * 540;
+    const y = 180 - (v / maxB) * 155;
+    return `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+
+  document.getElementById('balloonChartWrap').innerHTML = `
+    <svg class="chart" viewBox="0 0 600 200">
+      <line x1="30" y1="180" x2="570" y2="180" stroke="#334155" />
+      <path d="${toPath(stdPts)}" fill="none" stroke="#f59e0b" stroke-width="3" stroke-dasharray="6 4" />
+      <path d="${toPath(atkPts)}" fill="none" stroke="#10b981" stroke-width="3.5" />
+      <text x="40" y="20" fill="#f59e0b" font-size="12">--- Standard Balance (Hits ${fmt(balloon)} Cliff)</text>
+      <text x="320" y="20" fill="#10b981" font-size="12">— Balloon Attack Curve</text>
+    </svg>
+  `;
+}
+
+function quickLogBalloon() {
+  openPaymentModal(state.selectedBalloonAccountId, 'balloon', state.balloonSimExtraMonthly || 1500);
+}
+
+function renderActivity() {
+  const items = [
+    ...state.payments.map(p => ({ kind: 'payment', id: p.id, date: p.date, accountId: p.accountId, accountName: p.accountName, member: getProfileName(p.paidByProfileId), detail: `${p.type.toUpperCase()} — ${p.notes || ''}`, amount: p.amount, subType: p.type })),
+    ...state.expenses.map(e => ({ kind: 'expense', id: e.id, date: e.date, accountId: e.accountId, accountName: e.accountName, member: getProfileName(e.spentByProfileId), detail: `${e.category} (${e.spendType}) — ${e.notes || ''}`, amount: e.amount, subType: e.spendType }))
+  ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+  document.getElementById('ledgerBody').innerHTML = items.map(it => `
+    <tr>
+      <td>${it.date}</td>
+      <td>${it.kind === 'payment'
+        ? `<span class="pill ${it.subType === 'balloon' ? 'pill-amber' : 'pill-green'}">${it.subType === 'balloon' ? '🎈 Balloon Pay' : 'Payment'}</span>`
+        : `<span class="pill pill-red">Expense</span>`}
+      </td>
+      <td>${it.accountName}</td>
+      <td>${it.member}</td>
+      <td>${it.detail}</td>
+      <td style="font-weight:700; color:${it.kind === 'payment' ? 'var(--emerald)' : 'var(--red)'}">
+        ${it.kind === 'payment' ? '-' : '+'}${fmt(it.amount)}
+      </td>
+      <td><button class="danger" onclick="revertEntry('${it.kind}', '${it.id}')">Undo</button></td>
+    </tr>
+  `).join('') || `<tr><td colspan="7" style="color:var(--muted);">No activity logged yet.</td></tr>`;
+}
+
+function revertEntry(kind, id) {
+  if (kind === 'payment') {
+    const idx = state.payments.findIndex(p => p.id === id);
+    if (idx === -1) return;
+    const p = state.payments[idx];
+    const acc = state.accounts.find(a => a.id === p.accountId);
+    if (acc) {
+      acc.currentBalance = Number(acc.currentBalance) + Number(p.amount);
+      if (p.type === 'balloon') acc.balloonAmount = Number(acc.balloonAmount || 0) + Number(p.amount);
+    }
+    state.payments.splice(idx, 1);
+  } else {
+    const idx = state.expenses.findIndex(e => e.id === id);
+    if (idx === -1) return;
+    const e = state.expenses[idx];
+    const acc = state.accounts.find(a => a.id === e.accountId);
+    if (acc) acc.currentBalance = Math.max(0, Number(acc.currentBalance) - Number(e.amount));
+    state.expenses.splice(idx, 1);
+  }
+  saveState();
+  renderAll();
+}
+
+function renderChallenges() {
+  document.getElementById('profileXpGrid').innerHTML = state.profiles.map(p => `
+    <div class="card">
+      <div class="flex-between">
+        <h3>${p.emoji} ${p.name}</h3>
+        <span class="pill pill-green">${p.xp} XP</span>
+      </div>
+      <p style="font-size:0.82rem; color:var(--muted); margin-top:6px;">Level ${Math.floor(p.xp / 250) + 1} Debt Crusher</p>
+    </div>
+  `).join('');
+
+  document.getElementById('challengesGrid').innerHTML = state.challenges.map(c => {
+    const pct = c.target > 0 ? Math.min(100, (c.current / c.target) * 100) : 0;
+    return `
+      <div class="card" style="background:var(--card-2);">
+        <div class="flex-between">
+          <strong>${c.title}</strong>
+          <span class="pill ${c.completed ? 'pill-green' : (c.streakBroken ? 'pill-red' : 'pill-amber')}">
+            ${c.completed ? '✅ Completed' : (c.streakBroken ? '⚠️ Streak Paused' : `+${c.xp} XP`)}
+          </span>
+        </div>
+        <p style="font-size:0.82rem; color:var(--muted); margin-top:4px;">${c.desc || ''} · Due ${c.deadline}</p>
+        ${c.type !== 'habit' ? `
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
+          <div style="font-size:0.8rem;">Progress: ${fmt(c.current)} / ${fmt(c.target)}</div>
+        ` : ''}
+        <div class="row-actions">
+          ${!c.completed ? `<button class="primary" onclick="completeChallenge('${c.id}')">Mark Complete</button>` : ''}
+          ${c.streakBroken ? `<button class="amber" onclick="restartStreak('${c.id}')">Restart Streak</button>` : ''}
+          <button class="danger" onclick="deleteChallenge('${c.id}')">Remove</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  const totalHouseholdXp = state.profiles.reduce((s, p) => s + p.xp, 0);
+  document.getElementById('rewardsGrid').innerHTML = state.rewards.map(r => {
+    const poolXp = r.ownerId === 'JOINT' ? totalHouseholdXp : (state.profiles.find(p => p.id === r.ownerId)?.xp || 0);
+    const canClaim = !r.claimed && poolXp >= r.xpReq;
+    return `
+      <div class="card" style="background:var(--card-2);">
+        <div class="flex-between">
+          <strong>🎁 ${r.title}</strong>
+          <span class="pill pill-blue">${r.xpReq} XP · ${getProfileName(r.ownerId)}</span>
+        </div>
+        <div class="row-actions">
+          ${r.claimed
+            ? `<span class="pill pill-green">Claimed!</span>`
+            : `<button class="primary" ${canClaim ? '' : 'disabled'} onclick="claimReward('${r.id}')">${canClaim ? 'Claim Reward' : `Need ${r.xpReq - poolXp} more XP`}</button>`}
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function awardXp(ownerId, amount) {
+  if (ownerId === 'JOINT') {
+    const share = Math.round(amount / state.profiles.length);
+    state.profiles.forEach(p => p.xp += share);
+  } else {
+    const p = state.profiles.find(x => x.id === ownerId);
+    if (p) p.xp += amount;
+  }
+}
+
+function completeChallenge(id) {
+  const c = state.challenges.find(x => x.id === id);
+  if (!c || c.completed) return;
+  c.completed = true;
+  c.current = c.target;
+  awardXp(c.ownerId, c.xp);
+  saveState();
+  renderAll();
+}
+
+function restartStreak(id) {
+  const c = state.challenges.find(x => x.id === id);
+  if (!c) return;
+  c.streakBroken = false;
+  saveState();
+  renderAll();
+}
+
+function deleteChallenge(id) {
+  state.challenges = state.challenges.filter(x => x.id !== id);
+  saveState();
+  renderAll();
+}
+
+function claimReward(id) {
+  const r = state.rewards.find(x => x.id === id);
+  if (!r || r.claimed) return;
+  r.claimed = true;
+  saveState();
+  renderAll();
+}
+
+function addPresetChallenge(preset) {
+  const deadline = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  if (preset === 'balloon') {
+    state.challenges.push({
+      id: 'chal_' + Date.now(),
+      title: '🎈 Balloon Sinking Starter: R1,500',
+      desc: 'Log R1,500 in Balloon Sinking reductions.',
+      ownerId: 'JOINT',
+      type: 'balloon_amount',
+      target: 1500,
+      current: 0,
+      xp: 350,
+      deadline,
+      completed: false,
+      streakBroken: false
+    });
+  } else {
+    state.challenges.push({
+      id: 'chal_' + Date.now(),
+      title: '30-Day No Discretionary Card Spend',
+      desc: 'Zero discretionary card expenses for 30 days.',
+      ownerId: 'JOINT',
+      type: 'habit',
+      target: 1,
+      current: 0,
+      xp: 400,
+      deadline,
+      completed: false,
+      streakBroken: false
+    });
+  }
+  saveState();
+  renderAll();
+}
+
+function openPaymentModal(accId, type = 'regular', amount = '') {
+  const sel = document.getElementById('payAccountId');
+  sel.innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name} (${fmt(a.currentBalance)})</option>`).join('');
+  if (accId) sel.value = accId;
+  document.getElementById('payProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+  document.getElementById('payType').value = type;
+  document.getElementById('payAmount').value = amount;
+  document.getElementById('payDate').value = todayStr();
+  document.getElementById('payNotes').value = '';
+  document.getElementById('paymentModal').showModal();
+}
+
+function savePayment(e) {
+  e.preventDefault();
+  const accountId = document.getElementById('payAccountId').value;
+  const paidByProfileId = document.getElementById('payProfileId').value;
+  const type = document.getElementById('payType').value;
+  const amount = Number(document.getElementById('payAmount').value);
+  const date = document.getElementById('payDate').value;
+  const notes = document.getElementById('payNotes').value;
+
+  const acc = state.accounts.find(a => a.id === accountId);
+  if (!acc || amount <= 0) return;
+
+  acc.currentBalance = Math.max(0, Number(acc.currentBalance) - amount);
+  if (type === 'balloon' && acc.balloonAmount > 0) {
+    acc.balloonAmount = Math.max(0, Number(acc.balloonAmount) - amount);
+  }
+
+  state.payments.push({
+    id: 'pay_' + Date.now(),
+    accountId,
+    accountName: acc.name,
+    paidByProfileId,
+    type,
+    amount,
+    date,
+    notes
+  });
+
+  if (type === 'extra' || type === 'balloon') {
+    awardXp(paidByProfileId, 50);
+  }
+
+  state.challenges.forEach(c => {
+    if (c.completed) return;
+    if (c.type === 'amount' && type === 'extra') c.current += amount;
+    if (c.type === 'balloon_amount' && type === 'balloon') c.current += amount;
+    if (c.type !== 'habit' && c.current >= c.target) {
+      c.completed = true;
+      awardXp(c.ownerId, c.xp);
+    }
+  });
+
+  saveState();
+  document.getElementById('paymentModal').close();
+  renderAll();
+}
+
+function openExpenseModal(accId) {
+  const sel = document.getElementById('expAccountId');
+  sel.innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name} (${fmt(a.currentBalance)})</option>`).join('');
+  if (accId) sel.value = accId;
+  document.getElementById('expProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+  document.getElementById('expAmount').value = '';
+  document.getElementById('expDate').value = todayStr();
+  document.getElementById('expNotes').value = '';
+  document.getElementById('expenseModal').showModal();
+}
+
+function saveExpense(e) {
+  e.preventDefault();
+  const accountId = document.getElementById('expAccountId').value;
+  const spentByProfileId = document.getElementById('expProfileId').value;
+  const spendType = document.getElementById('expSpendType').value;
+  const category = document.getElementById('expCategory').value;
+  const amount = Number(document.getElementById('expAmount').value);
+  const date = document.getElementById('expDate').value;
+  const notes = document.getElementById('expNotes').value;
+
+  const acc = state.accounts.find(a => a.id === accountId);
+  if (!acc || amount <= 0) return;
+
+  acc.currentBalance = Number(acc.currentBalance) + amount;
+  if (acc.currentBalance > (acc.originalBalance || 0)) {
+    acc.originalBalance = acc.currentBalance;
+  }
+
+  state.expenses.push({
+    id: 'exp_' + Date.now(),
+    accountId,
+    accountName: acc.name,
+    spentByProfileId,
+    category,
+    spendType,
+    amount,
+    date,
+    notes
+  });
+
+  if (spendType === 'discretionary') {
+    state.challenges.forEach(c => {
+      if (!c.completed && c.type === 'habit' && (c.ownerId === 'JOINT' || c.ownerId === spentByProfileId)) {
+        c.streakBroken = true;
+      }
+    });
+  }
+
+  saveState();
+  document.getElementById('expenseModal').close();
+  renderAll();
+}
+
+function openAccountModal(id) {
+  const ownerSel = document.getElementById('accOwnerId');
+  ownerSel.innerHTML = `<option value="JOINT">🤝 Joint Account</option>` +
+    state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+
+  if (id) {
+    const a = state.accounts.find(x => x.id === id);
+    document.getElementById('accModalTitle').textContent = 'Edit Debt Account';
+    document.getElementById('accId').value = a.id;
+    document.getElementById('accName').value = a.name;
+    document.getElementById('accCategory').value = a.category;
+    ownerSel.value = a.ownerId;
+    document.getElementById('accOrigBal').value = a.originalBalance;
+    document.getElementById('accCurrBal').value = a.currentBalance;
+    document.getElementById('accApr').value = a.apr;
+    document.getElementById('accMinPay').value = a.minPayment;
+    document.getElementById('accBalloon').value = a.balloonAmount || 0;
+    document.getElementById('accMonths').value = a.remainingMonths || 0;
+    document.getElementById('accLimit').value = a.creditLimit || 0;
+    document.getElementById('accDueDay').value = a.dueDay || 25;
+  } else {
+    document.getElementById('accModalTitle').textContent = 'Add Debt Account';
+    document.getElementById('accId').value = '';
+    document.getElementById('accName').value = '';
+    document.getElementById('accOrigBal').value = '';
+    document.getElementById('accCurrBal').value = '';
+    document.getElementById('accApr').value = '';
+    document.getElementById('accMinPay').value = '';
+    document.getElementById('accBalloon').value = 0;
+    document.getElementById('accMonths').value = 0;
+    document.getElementById('accLimit').value = 0;
+    document.getElementById('accDueDay').value = 25;
+  }
+  document.getElementById('accountModal').showModal();
+}
+
+function saveAccount(e) {
+  e.preventDefault();
+  const id = document.getElementById('accId').value;
+  const balloonAmount = Number(document.getElementById('accBalloon').value || 0);
+  const payload = {
+    id: id || ('acc_' + Date.now()),
+    name: document.getElementById('accName').value,
+    category: document.getElementById('accCategory').value,
+    ownerId: document.getElementById('accOwnerId').value,
+    originalBalance: Number(document.getElementById('accOrigBal').value),
+    currentBalance: Number(document.getElementById('accCurrBal').value),
+    apr: Number(document.getElementById('accApr').value),
+    minPayment: Number(document.getElementById('accMinPay').value),
+    balloonAmount,
+    originalBalloonAmount: balloonAmount,
+    remainingMonths: Number(document.getElementById('accMonths').value || 0),
+    creditLimit: Number(document.getElementById('accLimit').value || 0),
+    dueDay: Number(document.getElementById('accDueDay').value || 25)
+  };
+  if (id) {
+    const idx = state.accounts.findIndex(a => a.id === id);
+    if (idx !== -1) {
+      payload.originalBalloonAmount = Math.max(balloonAmount, state.accounts[idx].originalBalloonAmount || 0);
+      state.accounts[idx] = payload;
+    }
+  } else {
+    state.accounts.push(payload);
+  }
+  saveState();
+  document.getElementById('accountModal').close();
+  renderAll();
+}
+
+function deleteAccount(id) {
+  state.accounts = state.accounts.filter(a => a.id !== id);
+  saveState();
+  renderAll();
+}
+
+function openChallengeModal() {
+  document.getElementById('chalOwner').innerHTML = `<option value="JOINT">🤝 Joint</option>` +
+    state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+  document.getElementById('chalDeadline').value = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  document.getElementById('challengeModal').showModal();
+}
+
+function saveChallenge(e) {
+  e.preventDefault();
+  state.challenges.push({
+    id: 'chal_' + Date.now(),
+    title: document.getElementById('chalTitle').value,
+    desc: document.getElementById('chalDesc').value,
+    type: document.getElementById('chalType').value,
+    target: Number(document.getElementById('chalTarget').value),
+    current: 0,
+    ownerId: document.getElementById('chalOwner').value,
+    xp: Number(document.getElementById('chalXp').value),
+    deadline: document.getElementById('chalDeadline').value,
+    completed: false,
+    streakBroken: false
+  });
+  saveState();
+  document.getElementById('challengeModal').close();
+  renderAll();
+}
+
+function openRewardModal() {
+  document.getElementById('rewOwner').innerHTML = `<option value="JOINT">🤝 Joint</option>` +
+    state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+  document.getElementById('rewardModal').showModal();
+}
+
+function saveReward(e) {
+  e.preventDefault();
+  state.rewards.push({
+    id: 'rew_' + Date.now(),
+    title: document.getElementById('rewTitle').value,
+    ownerId: document.getElementById('rewOwner').value,
+    xpReq: Number(document.getElementById('rewXp').value),
+    claimed: false
+  });
+  saveState();
+  document.getElementById('rewardModal').close();
+  renderAll();
+}
+
+function exportJSON() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `debtcrush_backup_${todayStr()}.json`;
+  a.click();
+}
+
+function importJSON(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = (ev) => {
+    try {
+      const parsed = JSON.parse(ev.target.result);
+      state = Object.assign({}, structuredClone(DEFAULT_STATE), parsed);
+      saveState();
+      renderAll();
+      alert('Backup imported and saved successfully!');
+    } catch (err) {
+      alert('Invalid JSON backup file.');
+    }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function renderAll() {
+  document.documentElement.className = state.theme || 'dark';
+  populateSelectors();
+  renderKPIs();
+  renderAccounts();
+  renderCashflowChart();
+  renderBalloonTab();
+  renderActivity();
+  renderChallenges();
+}
+
+renderAll();
+</script>
+</body>
+</html>
