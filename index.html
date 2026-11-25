@@ -245,6 +245,78 @@
     .hidden { display: none !important; }
     svg.chart { width: 100%; height: 210px; display: block; }
 
+    /* Budget Spend & Overrun Graphical Panel */
+    .budget-viz-row {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      padding: 10px 12px;
+      border-radius: 12px;
+      background: var(--card-2);
+      border: 1px solid var(--border);
+    }
+    .budget-viz-row.overrun {
+      border-color: rgba(239, 68, 68, 0.45);
+      background: rgba(239, 68, 68, 0.06);
+    }
+    .viz-track {
+      position: relative;
+      width: 100%;
+      height: 12px;
+      background: var(--bg);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .viz-fill-expected {
+      position: absolute;
+      top: 0;
+      left: 0;
+      height: 100%;
+      background: rgba(59, 130, 246, 0.32);
+      border-right: 2px dashed var(--blue);
+      border-radius: 999px;
+    }
+    .viz-fill-actual {
+      position: absolute;
+      top: 2px;
+      left: 0;
+      height: 8px;
+      border-radius: 999px;
+      transition: width 0.3s ease;
+    }
+    .overrun-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: var(--red-dim);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fecaca;
+      font-size: 0.85rem;
+    }
+    html.light .overrun-banner {
+      color: #991b1b;
+    }
+    .underbudget-banner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+      padding: 12px 16px;
+      border-radius: 12px;
+      background: var(--emerald-dim);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: #a7f3d0;
+      font-size: 0.85rem;
+    }
+    html.light .underbudget-banner {
+      color: #065f46;
+    }
+
     /* Privacy Masking Mode */
     body.privacy-mode .sensitive-val {
       filter: blur(7px);
@@ -391,6 +463,22 @@
 
     <div class="grid grid-4" id="budgetKpiGrid"></div>
 
+    <!-- BUDGET SPENDING & OVERRUN GRAPHICAL ANALYTICS -->
+    <div class="card" id="budgetAnalyticsCard">
+      <div class="flex-between" style="margin-bottom:14px;">
+        <div>
+          <h3>📈 Budget Spend vs. Expected Tracker</h3>
+          <p style="font-size:0.82rem; color:var(--muted);">Visual breakdown of planned/expected budget vs. actual spending and overrun alerts</p>
+        </div>
+        <div style="display:flex; gap:6px; align-items:center; flex-wrap:wrap;">
+          <button type="button" id="vizModeItemsBtn" class="primary" onclick="setBudgetVizMode('items')">📊 By Budget Item</button>
+          <button type="button" id="vizModeCatBtn" class="ghost" onclick="setBudgetVizMode('categories')">🍩 By Category</button>
+        </div>
+      </div>
+      <div id="budgetOverrunAlertWrap" style="margin-bottom:14px;"></div>
+      <div id="budgetVizWrap"></div>
+    </div>
+
     <div class="grid grid-2">
       <!-- INCOME COLUMN -->
       <div class="card">
@@ -487,7 +575,8 @@
           <h3>Debt Payments & Card Charges Ledger</h3>
           <p style="font-size:0.82rem; color:var(--muted);">History of debt repayments and credit/store card swipes</p>
         </div>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <select id="ledgerMemberFilter" onchange="changeLedgerMemberFilter(this.value)" title="Filter Ledger by Member"></select>
           <button class="primary" onclick="openTransactionModal()">+ Transaction</button>
         </div>
       </div>
@@ -843,6 +932,7 @@
       // Signed out: wipe state from memory and hide all data views
       if (unsubscribeDoc) { unsubscribeDoc(); unsubscribeDoc = null; }
       state = null;
+      ledgerMemberFilterValue = null;
       appView.classList.add('hidden');
       headerControls.classList.add('hidden');
       lockedView.classList.remove('hidden');
@@ -852,7 +942,7 @@
   });
 
   function clearRenderedDom() {
-    ['kpiGrid', 'accountsGrid', 'cashflowChartWrap', 'budgetKpiGrid', 'incomeList', 'budgetExpenseList', 'balloonKpis', 'balloonChartWrap', 'ledgerBody', 'profileXpGrid', 'challengesGrid', 'rewardsGrid'].forEach(id => {
+    ['kpiGrid', 'accountsGrid', 'cashflowChartWrap', 'budgetKpiGrid', 'budgetOverrunAlertWrap', 'budgetVizWrap', 'incomeList', 'budgetExpenseList', 'balloonKpis', 'balloonChartWrap', 'ledgerBody', 'profileXpGrid', 'challengesGrid', 'rewardsGrid'].forEach(id => {
       const el = document.getElementById(id);
       if (el) el.innerHTML = '';
     });
@@ -947,6 +1037,34 @@
 
   function fmt(n) { return 'R ' + Number(n || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
   function todayStr() { return new Date().toISOString().slice(0, 10); }
+  function getLoggedInProfileId() {
+    if (!state || !Array.isArray(state.profiles) || !state.profiles.length) return 'prof_1';
+    if (currentUser) {
+      const email = (currentUser.email || '').toLowerCase();
+      const display = (currentUser.displayName || '').toLowerCase();
+      const matched = state.profiles.find(p => {
+        const pname = (p.name || '').toLowerCase().trim();
+        return pname && (email.includes(pname) || display.includes(pname));
+      });
+      if (matched) return matched.id;
+    }
+    if (state.activeProfileId && state.activeProfileId !== 'HOUSEHOLD' && state.activeProfileId !== 'JOINT') {
+      return state.activeProfileId;
+    }
+    return state.profiles[0].id;
+  }
+
+  function getDefaultAccountIdForLoggedInUser(accountList) {
+    const list = Array.isArray(accountList) ? accountList : (state?.accounts || []);
+    if (!list.length) return '';
+    const loggedProfId = getLoggedInProfileId();
+    const ownAcc = list.find(a => a.ownerId === loggedProfId);
+    if (ownAcc) return ownAcc.id;
+    const jointAcc = list.find(a => a.ownerId === 'JOINT' || a.ownerId === 'HOUSEHOLD');
+    if (jointAcc) return jointAcc.id;
+    return list[0].id;
+  }
+
   function getProfileName(id) {
     if (id === 'JOINT' || id === 'HOUSEHOLD') return 'Joint / Household';
     const p = (state?.profiles || []).find(x => x.id === id);
@@ -1419,19 +1537,36 @@
         return aAdhoc - bAdhoc;
       });
 
-    const getEffectiveExpenseAmount = (e) => {
+    const activeYM = state.budgetMonth;
+
+    // Expected budget for each item:
+    // - For Adhoc items: their `estimatedAmount`
+    // - For regular/debt items: their budgeted `amount`
+    const getExpectedExpenseAmount = (e) => {
       if ((e.category || '').toLowerCase() === 'adhoc') {
-        return getAdhocLedgerActual(e.id, state.budgetMonth);
+        return Number(e.estimatedAmount || 0);
       }
       return Number(e.amount || 0);
     };
 
-    const activeYM = state.budgetMonth;
+    // Actual / current spend for each item:
+    // - For Adhoc items: actual ledger spend in activeYM
+    // - For regular/debt items: `amount` if checked/paid (or if due day reached), else `amount` as committed bill
+    // Wait: let's track BOTH committed/actual spend vs expected budget clearly!
+    const getEffectiveExpenseAmount = (e) => {
+      if ((e.category || '').toLowerCase() === 'adhoc') {
+        return getAdhocLedgerActual(e.id, activeYM);
+      }
+      return Number(e.amount || 0);
+    };
+
     const totalIncome = visIncomes.reduce((s, i) => s + Number(i.amount || 0), 0);
+    const totalExpectedBudget = visExpenses.reduce((s, e) => s + getExpectedExpenseAmount(e), 0);
     const totalBudgeted = visExpenses.reduce((s, e) => s + getEffectiveExpenseAmount(e), 0);
     const totalPaid = visExpenses.filter(e => isExpensePaidForMonth(e, activeYM)).reduce((s, e) => s + getEffectiveExpenseAmount(e), 0);
     const unpaidRemaining = Math.max(0, totalBudgeted - totalPaid);
     const leftForMonth = totalIncome - totalBudgeted;
+    const budgetVariance = totalBudgeted - totalExpectedBudget; // > 0 means exceeding expected budget
 
     const maskInc = Boolean(state.privacyMode || state.hideIncome);
     const maskExp = Boolean(state.hideExpenses);
@@ -1451,11 +1586,13 @@
       </div>
       <div class="card">
         <div class="flex-between" style="gap:4px;">
-          <div class="kpi-label">📋 Total Planned Expenses</div>
+          <div class="kpi-label">📋 Actual / Active Expenses</div>
           <button type="button" class="${maskExp ? 'amber' : 'ghost'}" style="padding:3px 8px; font-size:0.72rem;" onclick="toggleExpensesVisibility()">${maskExp ? '👁️ Show' : '🙈 Hide'}</button>
         </div>
-        <div class="kpi-val">${expValHtml}</div>
-        <div class="kpi-sub">${visExpenses.filter(e => isExpensePaidForMonth(e, activeYM)).length} of ${visExpenses.length} bills checked off</div>
+        <div class="kpi-val" style="color:${!maskExp && budgetVariance > 0 ? 'var(--red)' : 'var(--text)'}">${expValHtml}</div>
+        <div class="kpi-sub">${maskExp ? 'Hidden' : (budgetVariance > 0
+          ? `<span style="color:var(--red); font-weight:700;">▲ Exceeding expected (${fmt(totalExpectedBudget)}) by ${fmt(budgetVariance)}</span>`
+          : `Expected: ${fmt(totalExpectedBudget)} · ${visExpenses.filter(e => isExpensePaidForMonth(e, activeYM)).length}/${visExpenses.length} paid`)}</div>
       </div>
       <div class="card">
         <div class="kpi-label">⏳ Unpaid Bills Left</div>
@@ -1519,20 +1656,22 @@
       const isAdhoc = (exp.category || '').toLowerCase() === 'adhoc';
       const effectiveAmt = getEffectiveExpenseAmount(exp);
       const estAmt = Number(exp.estimatedAmount || 0);
+      const itemOverrun = isAdhoc ? Math.max(0, effectiveAmt - estAmt) : 0;
       const dueReached = exp.dueDay ? isDueDayReachedForMonth(exp.dueDay, state.budgetMonth) : false;
       const badges = [
         exp.linkedAccountId ? `<span class="pill pill-blue">🔗 Debt Sync</span>` : '',
         isAdhoc ? `<span class="pill pill-amber">Adhoc</span>` : '',
+        itemOverrun > 0 ? `<span class="pill pill-red">⚠️ +${fmt(itemOverrun)} over</span>` : '',
         exp.dueDay ? `<span class="pill ${dueReached ? 'pill-green' : 'pill-amber'}">Due ${exp.dueDay}${dueReached ? ' · Reached' : ''}</span>` : ''
       ].filter(Boolean).join(' ');
 
       const subDetail = isAdhoc
-        ? `${exp.category} · ${getProfileName(exp.ownerId)} · Est: ${fmt(estAmt)} | Actual: ${fmt(effectiveAmt)}`
+        ? `${exp.category} · ${getProfileName(exp.ownerId)} · Est: ${fmt(estAmt)} | Actual: ${fmt(effectiveAmt)}${itemOverrun > 0 ? ` (<span style="color:var(--red); font-weight:700;">Over by ${fmt(itemOverrun)}</span>)` : ''}`
         : `${exp.category} · ${getProfileName(exp.ownerId)}`;
 
       const isPaidThisMonth = isExpensePaidForMonth(exp, activeYM);
       return `
-        <div class="budget-item ${isPaidThisMonth ? 'paid' : ''}">
+        <div class="budget-item ${isPaidThisMonth ? 'paid' : ''}" style="${itemOverrun > 0 ? 'border-color:rgba(239,68,68,0.45);' : ''}">
           <div class="budget-left">
             <input type="checkbox" class="budget-check" ${isPaidThisMonth ? 'checked' : ''} onchange="toggleBudgetExpensePaid('${exp.id}', this.checked)" />
             <div>
@@ -1544,8 +1683,8 @@
           </div>
           <div style="display:flex; align-items:center; gap:8px;">
             <div style="text-align:right;">
-              <strong>${fmt(effectiveAmt)}</strong>
-              ${isAdhoc ? `<div style="font-size:0.7rem; color:var(--muted);">Est: ${fmt(estAmt)}</div>` : ''}
+              <strong style="${itemOverrun > 0 ? 'color:var(--red);' : ''}">${fmt(effectiveAmt)}</strong>
+              ${isAdhoc ? `<div style="font-size:0.7rem; color:${itemOverrun > 0 ? 'var(--red)' : 'var(--muted)'};">${itemOverrun > 0 ? `+${fmt(itemOverrun)} over` : `Est: ${fmt(estAmt)}`}</div>` : ''}
             </div>
             ${isAdhoc ? `<button class="amber" style="padding:5px 8px; font-size:0.75rem;" onclick="openTransactionModal({ mode: 'debit', budgetCatId: '${exp.id}', lockDebitOnly: true })" title="Log a card charge to this Adhoc category">+ Log</button>` : ''}
             <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
@@ -1554,6 +1693,205 @@
         </div>
       `;
     }).join('') || `<p style="color:var(--muted); font-size:0.86rem;">No monthly expenses listed yet. Click "+ Add Expense" or add a debt account with a minimum payment.</p>`;
+
+    renderBudgetAnalytics(visExpenses, totalExpectedBudget, totalBudgeted, totalPaid, maskExp);
+  }
+
+  let budgetVizMode = 'items';
+  window.setBudgetVizMode = function(mode) {
+    budgetVizMode = mode;
+    renderBudgetTab();
+  };
+
+  function renderBudgetAnalytics(visExpenses, totalExpectedBudget, totalActualBudget, totalPaid, maskExp) {
+    const cardEl = document.getElementById('budgetAnalyticsCard');
+    if (!cardEl) return;
+    cardEl.classList.toggle('hidden', maskExp);
+    if (maskExp) return;
+
+    const itemsBtn = document.getElementById('vizModeItemsBtn');
+    const catBtn = document.getElementById('vizModeCatBtn');
+    if (itemsBtn && catBtn) {
+      itemsBtn.className = budgetVizMode === 'items' ? 'primary' : 'ghost';
+      catBtn.className = budgetVizMode === 'categories' ? 'primary' : 'ghost';
+    }
+
+    const activeYM = state.budgetMonth;
+    const rows = visExpenses.map(e => {
+      const isAdhoc = (e.category || '').toLowerCase() === 'adhoc';
+      const expected = isAdhoc ? Number(e.estimatedAmount || 0) : Number(e.amount || 0);
+      const actual = isAdhoc ? getAdhocLedgerActual(e.id, activeYM) : Number(e.amount || 0);
+      const isPaid = isExpensePaidForMonth(e, activeYM);
+      const diff = actual - expected;
+      return {
+        id: e.id,
+        name: e.name,
+        category: e.category || 'Other',
+        isAdhoc,
+        isPaid,
+        expected,
+        actual,
+        diff,
+        overrun: Math.max(0, diff)
+      };
+    });
+
+    const overrunItems = rows.filter(r => r.overrun > 0);
+    const totalItemOverruns = overrunItems.reduce((s, r) => s + r.overrun, 0);
+    const netDiff = totalActualBudget - totalExpectedBudget;
+    const pctUsed = totalExpectedBudget > 0 ? (totalActualBudget / totalExpectedBudget) * 100 : (totalActualBudget > 0 ? 100 : 0);
+
+    // 1. Overrun / Status Banner
+    const alertWrap = document.getElementById('budgetOverrunAlertWrap');
+    if (!rows.length) {
+      alertWrap.innerHTML = '';
+      document.getElementById('budgetVizWrap').innerHTML = `<p style="color:var(--muted); font-size:0.85rem;">Add budget items below to see your spending vs. expected budget chart.</p>`;
+      return;
+    }
+
+    if (netDiff > 0 || overrunItems.length > 0) {
+      const breakdownList = overrunItems.map(r => `<strong>${r.name}</strong> (+${fmt(r.overrun)})`).join(', ');
+      alertWrap.innerHTML = `
+        <div class="overrun-banner">
+          <div>
+            <div style="font-weight:800; font-size:0.92rem;">🚨 Budget Exceeded by ${fmt(Math.max(netDiff, totalItemOverruns))}</div>
+            <div style="font-size:0.8rem; opacity:0.92; margin-top:2px;">
+              Expected Total: <strong>${fmt(totalExpectedBudget)}</strong> · Current/Actual Total: <strong>${fmt(totalActualBudget)}</strong> (${pctUsed.toFixed(1)}% of expected)
+              ${breakdownList ? `<br/>Over-budget items: ${breakdownList}` : ''}
+            </div>
+          </div>
+          <span class="pill pill-red" style="font-size:0.8rem; padding:5px 11px;">+${fmt(Math.max(netDiff, totalItemOverruns))} Over Expected</span>
+        </div>
+      `;
+    } else {
+      const headroom = Math.max(0, totalExpectedBudget - totalActualBudget);
+      alertWrap.innerHTML = `
+        <div class="underbudget-banner">
+          <div>
+            <div style="font-weight:800; font-size:0.9rem;">✅ Within Expected Budget (${pctUsed.toFixed(1)}% utilized)</div>
+            <div style="font-size:0.8rem; opacity:0.92; margin-top:2px;">
+              Expected Total: <strong>${fmt(totalExpectedBudget)}</strong> · Actual/Active Spend: <strong>${fmt(totalActualBudget)}</strong> · Remaining Buffer: <strong>${fmt(headroom)}</strong>
+            </div>
+          </div>
+          <span class="pill pill-green" style="font-size:0.78rem; padding:5px 11px;">${fmt(headroom)} Under Limit</span>
+        </div>
+      `;
+    }
+
+    // 2. Render Selected Graphical View
+    const vizWrap = document.getElementById('budgetVizWrap');
+
+    if (budgetVizMode === 'items') {
+      const sorted = [...rows].sort((a, b) => Math.max(b.actual, b.expected) - Math.max(a.actual, a.expected));
+      const maxScale = Math.max(100, ...sorted.map(r => Math.max(r.actual, r.expected)));
+
+      const legendHtml = `
+        <div style="display:flex; gap:16px; flex-wrap:wrap; font-size:0.76rem; color:var(--muted); margin-bottom:12px;">
+          <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:12px; height:8px; border-radius:3px; background:var(--emerald); display:inline-block;"></span> Paid / Checked Off</span>
+          <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:12px; height:8px; border-radius:3px; background:var(--amber); display:inline-block;"></span> Active / Unpaid</span>
+          <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:12px; height:8px; border-radius:3px; background:var(--red); display:inline-block;"></span> Exceeded Expected</span>
+          <span style="display:inline-flex; align-items:center; gap:6px;"><span style="width:12px; height:10px; border-radius:3px; background:rgba(59,130,246,0.32); border-right:2px dashed var(--blue); display:inline-block;"></span> Expected Target Marker</span>
+        </div>
+      `;
+
+      const barsHtml = sorted.map(r => {
+        const expPct = Math.min(100, (r.expected / maxScale) * 100);
+        const actPct = Math.min(100, (r.actual / maxScale) * 100);
+        const utilPct = r.expected > 0 ? ((r.actual / r.expected) * 100).toFixed(0) : (r.actual > 0 ? '∞' : '0');
+        let barColor = r.isPaid ? 'var(--emerald)' : 'var(--amber)';
+        if (r.overrun > 0) barColor = 'var(--red)';
+
+        const statusBadge = r.overrun > 0
+          ? `<span class="pill pill-red">+${fmt(r.overrun)} over (${utilPct}%)</span>`
+          : (r.isAdhoc
+              ? `<span class="pill ${r.actual <= r.expected ? 'pill-green' : 'pill-amber'}">${fmt(Math.max(0, r.expected - r.actual))} left (${utilPct}%)</span>`
+              : `<span class="pill ${r.isPaid ? 'pill-green' : 'pill-blue'}">${r.isPaid ? 'Paid' : 'Planned'}</span>`);
+
+        return `
+          <div class="budget-viz-row ${r.overrun > 0 ? 'overrun' : ''}">
+            <div class="flex-between" style="gap:8px;">
+              <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+                <strong style="font-size:0.88rem;">${r.name}</strong>
+                <span style="font-size:0.74rem; color:var(--muted);">${r.category}</span>
+                ${statusBadge}
+              </div>
+              <div style="font-size:0.82rem; text-align:right;">
+                <strong style="color:${r.overrun > 0 ? 'var(--red)' : 'var(--text)'};">${fmt(r.actual)}</strong>
+                <span style="color:var(--muted);"> / ${fmt(r.expected)} expected</span>
+              </div>
+            </div>
+            <div class="viz-track" title="Actual: ${fmt(r.actual)} vs Expected: ${fmt(r.expected)}">
+              <div class="viz-fill-expected" style="width:${expPct.toFixed(1)}%;"></div>
+              <div class="viz-fill-actual" style="width:${actPct.toFixed(1)}%; background:${barColor};"></div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      vizWrap.innerHTML = legendHtml + `<div class="stack" style="gap:10px;">${barsHtml}</div>`;
+    } else {
+      // Category Donut + Category Expected vs Actual Breakdown
+      const catMap = new Map();
+      rows.forEach(r => {
+        const prev = catMap.get(r.category) || { category: r.category, expected: 0, actual: 0 };
+        prev.expected += r.expected;
+        prev.actual += r.actual;
+        catMap.set(r.category, prev);
+      });
+      const cats = Array.from(catMap.values()).sort((a, b) => b.actual - a.actual);
+      const palette = ['#10b981', '#3b82f6', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#ef4444', '#84cc16', '#f97316'];
+      const totalForDonut = Math.max(1, cats.reduce((s, c) => s + c.actual, 0));
+
+      // SVG Donut segments
+      const radius = 64;
+      const circumference = 2 * Math.PI * radius;
+      let offset = 0;
+      const segments = cats.map((c, idx) => {
+        const frac = c.actual / totalForDonut;
+        const dash = frac * circumference;
+        const color = c.actual > c.expected ? '#ef4444' : palette[idx % palette.length];
+        const seg = `<circle cx="90" cy="90" r="${radius}" fill="transparent" stroke="${color}" stroke-width="22" stroke-dasharray="${dash.toFixed(2)} ${(circumference - dash).toFixed(2)}" stroke-dashoffset="${(-offset).toFixed(2)}" transform="rotate(-90 90 90)" />`;
+        offset += dash;
+        return seg;
+      }).join('');
+
+      const catRowsHtml = cats.map((c, idx) => {
+        const sharePct = ((c.actual / totalForDonut) * 100).toFixed(1);
+        const catOver = Math.max(0, c.actual - c.expected);
+        const color = catOver > 0 ? '#ef4444' : palette[idx % palette.length];
+        return `
+          <div class="budget-viz-row ${catOver > 0 ? 'overrun' : ''}" style="padding:8px 12px;">
+            <div class="flex-between" style="gap:8px;">
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span style="width:10px; height:10px; border-radius:50%; background:${color}; display:inline-block;"></span>
+                <strong style="font-size:0.85rem;">${c.category}</strong>
+                <span class="pill pill-blue">${sharePct}%</span>
+                ${catOver > 0 ? `<span class="pill pill-red">+${fmt(catOver)} over</span>` : ''}
+              </div>
+              <div style="font-size:0.8rem;">
+                <strong style="color:${catOver > 0 ? 'var(--red)' : 'var(--text)'};">${fmt(c.actual)}</strong>
+                <span style="color:var(--muted);"> / ${fmt(c.expected)}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      vizWrap.innerHTML = `
+        <div class="grid grid-2" style="align-items:center;">
+          <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; padding:8px;">
+            <svg width="180" height="180" viewBox="0 0 180 180">
+              <circle cx="90" cy="90" r="${radius}" fill="transparent" stroke="#1e293b" stroke-width="22" />
+              ${segments}
+              <text x="90" y="86" text-anchor="middle" fill="currentColor" font-size="11" font-weight="700">TOTAL SPEND</text>
+              <text x="90" y="104" text-anchor="middle" fill="${netDiff > 0 ? '#ef4444' : '#10b981'}" font-size="12" font-weight="800">${fmt(totalActualBudget)}</text>
+            </svg>
+            <div style="font-size:0.76rem; color:var(--muted); margin-top:4px;">Red slices indicate categories exceeding expected budget</div>
+          </div>
+          <div class="stack" style="gap:8px;">${catRowsHtml}</div>
+        </div>
+      `;
+    }
   }
 
   window.openIncomeModal = function(id) {
@@ -1563,7 +1901,7 @@
     document.getElementById('incModalTitle').textContent = item ? 'Edit Income Source' : 'Add Monthly Income';
     document.getElementById('incId').value = item ? item.id : '';
     document.getElementById('incSource').value = item ? item.source : '';
-    sel.value = item ? item.ownerId : 'prof_1';
+    sel.value = item ? item.ownerId : getLoggedInProfileId();
     document.getElementById('incAmount').value = item ? item.amount : '';
     document.getElementById('incNotes').value = item ? (item.notes || '') : '';
     document.getElementById('incomeModal').showModal();
@@ -1627,7 +1965,7 @@
     document.getElementById('bExpEstimatedAmount').value = item && isAdhoc ? (item.estimatedAmount ?? '') : '';
     document.getElementById('bExpActualAmount').value = item && isAdhoc ? getAdhocLedgerActual(item.id, state.budgetMonth).toFixed(2) : '0.00';
     toggleAdhocBudgetFields();
-    sel.value = item ? item.ownerId : 'JOINT';
+    sel.value = item ? item.ownerId : getLoggedInProfileId();
     document.getElementById('bExpDueDay').value = item ? (item.dueDay || '') : '';
     document.getElementById('budgetExpenseModal').showModal();
   };
@@ -1727,7 +2065,11 @@
     if (!bAccs.length) { document.getElementById('balloonEmpty').classList.remove('hidden'); document.getElementById('balloonContent').classList.add('hidden'); return; }
     document.getElementById('balloonEmpty').classList.add('hidden');
     document.getElementById('balloonContent').classList.remove('hidden');
-    if (!bAccs.some(a => a.id === state.selectedBalloonAccountId)) state.selectedBalloonAccountId = bAccs[0].id;
+    if (!bAccs.some(a => a.id === state.selectedBalloonAccountId)) {
+      const loggedProfId = getLoggedInProfileId();
+      const userBalloon = bAccs.find(a => a.ownerId === loggedProfId);
+      state.selectedBalloonAccountId = userBalloon ? userBalloon.id : bAccs[0].id;
+    }
     sel.value = state.selectedBalloonAccountId;
     document.getElementById('simExtraMonthly').value = state.balloonSimExtraMonthly || 0;
     document.getElementById('simAnnualLump').value = state.balloonSimAnnualLump || 0;
@@ -1775,7 +2117,39 @@
   window.quickLogBalloon = function() { openTransactionModal({ mode: 'payment', accId: state.selectedBalloonAccountId, type: 'balloon', amount: state.balloonSimExtraMonthly || 1500 }); };
 
   /* ==================== 4. LEDGER & 5. CHALLENGES ==================== */
+  let ledgerMemberFilterValue = null;
+
+  window.changeLedgerMemberFilter = function(val) {
+    ledgerMemberFilterValue = val;
+    renderActivity();
+  };
+
+  window.updateLedgerEntryMember = function(kind, id, newProfileId) {
+    if (!state) return;
+    if (kind === 'payment') {
+      const p = state.payments.find(x => x.id === id);
+      if (p) p.paidByProfileId = newProfileId;
+    } else {
+      const e = state.expenses.find(x => x.id === id);
+      if (e) e.spentByProfileId = newProfileId;
+    }
+    saveState();
+    renderActivity();
+  };
+
   function renderActivity() {
+    const filterSel = document.getElementById('ledgerMemberFilter');
+    if (filterSel) {
+      if (ledgerMemberFilterValue === null) {
+        ledgerMemberFilterValue = getLoggedInProfileId();
+      }
+      filterSel.innerHTML = `<option value="ALL">👥 All Members</option>` +
+        state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+      filterSel.value = ledgerMemberFilterValue;
+    }
+
+    const activeMemberFilter = ledgerMemberFilterValue || 'ALL';
+
     const items = [
       ...state.payments.map(p => {
         const isAdhoc = p.type === 'adhoc';
@@ -1786,7 +2160,7 @@
           id: p.id,
           date: p.date,
           accountName: targetLabel,
-          member: getProfileName(p.paidByProfileId),
+          memberId: p.paidByProfileId || getLoggedInProfileId(),
           detail: `${p.type.toUpperCase()} — ${p.notes || ''}`,
           amount: p.amount,
           subType: p.type
@@ -1795,9 +2169,21 @@
       ...state.expenses.map(e => {
         const bCat = e.budgetCategoryId ? state.monthlyBudgetExpenses.find(b => b.id === e.budgetCategoryId) : null;
         const adhocTag = bCat ? ` [🧾 ${bCat.name}]` : (e.budgetCategoryName ? ` [🧾 ${e.budgetCategoryName}]` : '');
-        return { kind: 'expense', id: e.id, date: e.date, accountName: e.accountName, member: getProfileName(e.spentByProfileId), detail: `${e.category}${adhocTag} — ${e.notes || ''}`, amount: e.amount, subType: e.spendType };
+        return {
+          kind: 'expense',
+          id: e.id,
+          date: e.date,
+          accountName: e.accountName,
+          memberId: e.spentByProfileId || getLoggedInProfileId(),
+          detail: `${e.category}${adhocTag} — ${e.notes || ''}`,
+          amount: e.amount,
+          subType: e.spendType
+        };
       })
-    ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    ]
+      .filter(it => activeMemberFilter === 'ALL' || it.memberId === activeMemberFilter)
+      .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
     document.getElementById('ledgerBody').innerHTML = items.map(it => {
       let badgeHtml = `<span class="pill pill-red">Card Charge</span>`;
       let amtColor = 'var(--red)';
@@ -1817,16 +2203,25 @@
           prefix = '-';
         }
       }
+      const memberOptions = state.profiles.map(p =>
+        `<option value="${p.id}" ${p.id === it.memberId ? 'selected' : ''}>${p.emoji} ${p.name}</option>`
+      ).join('');
       return `
         <tr>
           <td>${it.date}</td>
           <td>${badgeHtml}</td>
-          <td>${it.accountName}</td><td>${it.member}</td><td>${it.detail}</td>
+          <td>${it.accountName}</td>
+          <td>
+            <select style="padding:4px 8px; font-size:0.8rem;" onchange="updateLedgerEntryMember('${it.kind}', '${it.id}', this.value)">
+              ${memberOptions}
+            </select>
+          </td>
+          <td>${it.detail}</td>
           <td style="font-weight:700; color:${amtColor}">${prefix}${fmt(it.amount)}</td>
           <td><button class="danger" onclick="revertEntry('${it.kind}', '${it.id}')">Undo</button></td>
         </tr>
       `;
-    }).join('') || `<tr><td colspan="7" style="color:var(--muted);">No activity logged yet.</td></tr>`;
+    }).join('') || `<tr><td colspan="7" style="color:var(--muted);">No activity logged for this member yet.</td></tr>`;
   }
 
   window.revertEntry = function(kind, id) {
@@ -2033,15 +2428,29 @@
     const accountList = (lockDebitOnly || type === 'adhoc')
       ? [...state.accounts].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
       : state.accounts;
+    const loggedProfId = getLoggedInProfileId();
     document.getElementById('txAccountId').innerHTML = accountList.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-    if (opts.accId) document.getElementById('txAccountId').value = opts.accId;
+    if (opts.accId) {
+      document.getElementById('txAccountId').value = opts.accId;
+    } else {
+      const defaultAccId = getDefaultAccountIdForLoggedInUser(accountList);
+      if (defaultAccId) document.getElementById('txAccountId').value = defaultAccId;
+    }
 
     document.getElementById('txBudgetCategoryId').innerHTML = adhocCats.length
       ? adhocCats.map(c => `<option value="${c.id}">${c.name} (Est: ${fmt(c.estimatedAmount || 0)})</option>`).join('')
       : `<option value="">-- Create an Adhoc Budget Expense first --</option>`;
     if (opts.budgetCatId) document.getElementById('txBudgetCategoryId').value = opts.budgetCatId;
 
-    document.getElementById('txProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    const txProfSel = document.getElementById('txProfileId');
+    txProfSel.innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    txProfSel.value = loggedProfId;
+    txProfSel.onchange = () => {
+      if (opts.accId) return;
+      const chosenProf = txProfSel.value;
+      const memberAcc = accountList.find(a => a.ownerId === chosenProf) || accountList.find(a => a.ownerId === 'JOINT');
+      if (memberAcc) document.getElementById('txAccountId').value = memberAcc.id;
+    };
     document.getElementById('txPayType').value = type;
     document.getElementById('txAmount').value = opts.amount || '';
     document.getElementById('txDate').value = todayStr();
@@ -2150,7 +2559,7 @@
     document.getElementById('accModalTitle').textContent = a ? 'Edit Debt Account' : 'Add Debt Account';
     document.getElementById('accName').value = a ? a.name : '';
     document.getElementById('accCategory').value = a ? a.category : 'Vehicle Finance';
-    document.getElementById('accOwnerId').value = a ? a.ownerId : 'JOINT';
+    document.getElementById('accOwnerId').value = a ? a.ownerId : getLoggedInProfileId();
     document.getElementById('accOrigBal').value = a ? a.originalBalance : '';
     document.getElementById('accCurrBal').value = a ? a.currentBalance : '';
     document.getElementById('accApr').value = a ? a.apr : '';
@@ -2207,11 +2616,24 @@
   };
 
   window.openChallengeModal = function() {
+    const loggedProfId = getLoggedInProfileId();
     const sortedAccs = [...state.accounts].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
-    document.getElementById('chalAccountId').innerHTML = `<option value="">-- Any / All Accounts --</option>` +
+    const chalAccSel = document.getElementById('chalAccountId');
+    chalAccSel.innerHTML = `<option value="">-- Any / All Accounts --</option>` +
       sortedAccs.map(a => `<option value="${a.id}">${a.name} (${a.category})</option>`).join('');
-    document.getElementById('chalOwner').innerHTML = `<option value="JOINT">🤝 Joint / Household</option>` +
+    const defaultChalAcc = getDefaultAccountIdForLoggedInUser(sortedAccs);
+    if (defaultChalAcc) chalAccSel.value = defaultChalAcc;
+
+    const chalOwnerSel = document.getElementById('chalOwner');
+    chalOwnerSel.innerHTML = `<option value="JOINT">🤝 Joint / Household</option>` +
       state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    chalOwnerSel.value = loggedProfId;
+    chalOwnerSel.onchange = () => {
+      const chosen = chalOwnerSel.value;
+      if (chosen === 'JOINT') return;
+      const memberAcc = sortedAccs.find(a => a.ownerId === chosen);
+      if (memberAcc) chalAccSel.value = memberAcc.id;
+    };
 
     const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10);
     document.getElementById('chalTitle').value = '';
@@ -2245,8 +2667,26 @@
     document.getElementById('challengeModal').close();
     renderAll();
   };
-  window.openRewardModal = function() { document.getElementById('rewOwner').innerHTML = `<option value="JOINT">🤝 Joint</option>`; document.getElementById('rewardModal').showModal(); };
-  window.saveReward = function(e) { e.preventDefault(); state.rewards.push({ id: 'rew_' + Date.now(), title: document.getElementById('rewTitle').value, ownerId: 'JOINT', xpReq: Number(document.getElementById('rewXp').value), claimed: false }); saveState(); document.getElementById('rewardModal').close(); renderAll(); };
+  window.openRewardModal = function() {
+    const rewSel = document.getElementById('rewOwner');
+    rewSel.innerHTML = `<option value="JOINT">🤝 Joint / Household</option>` +
+      state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    rewSel.value = getLoggedInProfileId();
+    document.getElementById('rewardModal').showModal();
+  };
+  window.saveReward = function(e) {
+    e.preventDefault();
+    state.rewards.push({
+      id: 'rew_' + Date.now(),
+      title: document.getElementById('rewTitle').value,
+      ownerId: document.getElementById('rewOwner').value || getLoggedInProfileId(),
+      xpReq: Number(document.getElementById('rewXp').value),
+      claimed: false
+    });
+    saveState();
+    document.getElementById('rewardModal').close();
+    renderAll();
+  };
 
   window.exportJSON = function() {
     if (!state) return;
