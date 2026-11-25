@@ -244,6 +244,24 @@
     .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
     .hidden { display: none !important; }
     svg.chart { width: 100%; height: 210px; display: block; }
+
+    /* Privacy Masking Mode */
+    body.privacy-mode .sensitive-val {
+      filter: blur(7px);
+      user-select: none;
+      transition: filter 0.15s ease;
+    }
+    body.privacy-mode .sensitive-val:hover {
+      filter: blur(4px);
+    }
+    .privacy-shield-banner {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 44px 24px;
+      text-align: center;
+      margin-bottom: 18px;
+    }
   </style>
 </head>
 <body>
@@ -260,6 +278,7 @@
       <select id="profileFilter" title="Active Profile View">
         <option value="HOUSEHOLD">🏠 Household (All)</option>
       </select>
+      <button id="privacyToggleBtn" class="ghost" onclick="togglePrivacyMode()" title="Hide/Show sensitive balances, income & Debt Overview">🙈 Privacy: Off</button>
       <button class="primary" onclick="openTransactionModal()">+ Transaction</button>
 
       <div class="dropdown">
@@ -311,6 +330,15 @@
 
   <!-- 1. DEBT OVERVIEW TAB -->
   <section id="tab-dashboard" class="stack">
+    <div id="dashboardPrivacyShield" class="privacy-shield-banner hidden">
+      <div style="font-size:2rem; margin-bottom:10px;">🙈</div>
+      <h3>Debt Overview Hidden (Privacy Mode Active)</h3>
+      <p style="color:var(--muted); font-size:0.86rem; max-width:440px; margin:8px auto 16px;">
+        Account balances, debt totals, and cashflow charts are hidden from screen view.
+      </p>
+      <button class="primary" onclick="togglePrivacyMode()">👁️ Reveal Debt Overview & Income</button>
+    </div>
+    <div id="dashboardMainContent" class="stack">
     <div class="grid grid-4" id="kpiGrid"></div>
 
     <div class="card">
@@ -340,6 +368,7 @@
       </div>
       <div id="cashflowChartWrap"></div>
     </div>
+    </div>
   </section>
 
   <!-- 2. MONTHLY BUDGET & INCOME TAB -->
@@ -368,7 +397,16 @@
             <h3>💵 Monthly Income</h3>
             <p style="font-size:0.8rem; color:var(--muted);">Salaries, rental income, side hustles</p>
           </div>
-          <button class="primary" onclick="openIncomeModal()">+ Add Income</button>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button type="button" id="incomeSectionToggleBtn" class="ghost" onclick="toggleIncomeVisibility()" title="Hide/Show income details">🙈 Hide</button>
+            <button class="primary" onclick="openIncomeModal()">+ Add Income</button>
+          </div>
+        </div>
+        <div id="incomeHiddenBanner" class="sub-card hidden" style="text-align:center; padding:24px 14px;">
+          <div style="font-size:1.4rem; margin-bottom:6px;">🙈</div>
+          <div style="font-weight:700; font-size:0.9rem;">Income Hidden</div>
+          <p style="color:var(--muted); font-size:0.78rem; margin:4px 0 12px;">Salary and income sources are concealed.</p>
+          <button type="button" class="ghost" style="padding:5px 10px; font-size:0.78rem;" onclick="toggleIncomeVisibility()">👁️ Show Income</button>
         </div>
         <div id="incomeList" class="stack" style="gap:10px;"></div>
       </div>
@@ -630,13 +668,20 @@
 <dialog id="challengeModal">
   <h3 style="margin-bottom:14px;">Create Custom Challenge</h3>
   <form onsubmit="saveChallenge(event)">
-    <div class="form-group"><label>Challenge Title</label><input type="text" id="chalTitle" required /></div>
-    <div class="form-group"><label>Description</label><input type="text" id="chalDesc" /></div>
+    <div class="form-group"><label>Challenge Title</label><input type="text" id="chalTitle" placeholder="e.g., No-Spend on Credit Card This Month" required /></div>
+    <div class="form-group"><label>Target Account (Optional)</label>
+      <select id="chalAccountId"></select>
+    </div>
+    <div class="form-group"><label>Description</label><input type="text" id="chalDesc" placeholder="e.g., Zero new card charges until month end" /></div>
     <div class="form-row">
       <div class="form-group"><label>Type</label>
-        <select id="chalType"><option value="amount">Extra Payment Target (R)</option><option value="balloon_amount">🎈 Balloon Sinking Target (R)</option><option value="habit">No-Spend Habit Streak</option></select>
+        <select id="chalType" onchange="toggleChallengeTargetField()">
+          <option value="habit">🚫 No-Spend / Don't Touch Card</option>
+          <option value="amount">💸 Extra Payment Target (R)</option>
+          <option value="balloon_amount">🎈 Balloon Sinking Target (R)</option>
+        </select>
       </div>
-      <div class="form-group"><label>Target</label><input type="number" id="chalTarget" min="1" value="2000" required /></div>
+      <div class="form-group" id="chalTargetGroup"><label id="chalTargetLabel">Target (Days)</label><input type="number" id="chalTarget" min="1" value="30" required /></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Assigned To</label><select id="chalOwner"></select></div>
@@ -711,6 +756,8 @@
   const EMPTY_STATE = {
     currency: 'ZAR',
     theme: 'dark',
+    privacyMode: false,
+    hideIncome: false,
     strategy: 'avalanche',
     extraMonthlySim: 1500,
     selectedBalloonAccountId: '',
@@ -1014,6 +1061,45 @@
     saveState();
   };
 
+  function applyPrivacyUI() {
+    if (!state) return;
+    const isPriv = Boolean(state.privacyMode);
+    document.body.classList.toggle('privacy-mode', isPriv);
+    const btn = document.getElementById('privacyToggleBtn');
+    if (btn) {
+      btn.textContent = isPriv ? '👁️ Privacy: On' : '🙈 Privacy: Off';
+      btn.className = isPriv ? 'amber' : 'ghost';
+    }
+    const dashMain = document.getElementById('dashboardMainContent');
+    const dashShield = document.getElementById('dashboardPrivacyShield');
+    if (dashMain && dashShield) {
+      dashMain.classList.toggle('hidden', isPriv);
+      dashShield.classList.toggle('hidden', !isPriv);
+    }
+  }
+
+  window.togglePrivacyMode = function() {
+    if (!state) return;
+    state.privacyMode = !state.privacyMode;
+    if (!state.privacyMode) state.hideIncome = false;
+    saveState();
+    applyPrivacyUI();
+    renderBudgetTab();
+  };
+
+  window.toggleIncomeVisibility = function() {
+    if (!state) return;
+    if (state.privacyMode) {
+      state.privacyMode = false;
+      state.hideIncome = false;
+    } else {
+      state.hideIncome = !state.hideIncome;
+    }
+    saveState();
+    applyPrivacyUI();
+    renderBudgetTab();
+  };
+
   window.switchTab = function(t) {
     if (!state) return;
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === t));
@@ -1292,11 +1378,18 @@
     const unpaidRemaining = Math.max(0, totalBudgeted - totalPaid);
     const leftForMonth = totalIncome - totalBudgeted;
 
+    const maskInc = Boolean(state.privacyMode || state.hideIncome);
+    const incValHtml = maskInc ? 'R ••••••' : fmt(totalIncome);
+    const leftValHtml = maskInc ? 'R ••••••' : fmt(leftForMonth);
+
     document.getElementById('budgetKpiGrid').innerHTML = `
       <div class="card">
-        <div class="kpi-label">💵 Total Monthly Income</div>
-        <div class="kpi-val" style="color:var(--emerald)">${fmt(totalIncome)}</div>
-        <div class="kpi-sub">${visIncomes.length} income source(s)</div>
+        <div class="flex-between" style="gap:4px;">
+          <div class="kpi-label">💵 Total Monthly Income</div>
+          <button type="button" class="ghost" style="padding:2px 7px; font-size:0.7rem;" onclick="toggleIncomeVisibility()" title="Toggle income visibility">${maskInc ? '👁️' : '🙈'}</button>
+        </div>
+        <div class="kpi-val" style="color:var(--emerald)">${incValHtml}</div>
+        <div class="kpi-sub">${maskInc ? 'Hidden (click eye to reveal)' : `${visIncomes.length} income source(s)`}</div>
       </div>
       <div class="card">
         <div class="kpi-label">📋 Total Planned Expenses</div>
@@ -1310,10 +1403,19 @@
       </div>
       <div class="card">
         <div class="kpi-label">🎯 Left For The Month</div>
-        <div class="kpi-val" style="color:${leftForMonth >= 0 ? 'var(--emerald)' : 'var(--red)'}">${fmt(leftForMonth)}</div>
-        <div class="kpi-sub">${leftForMonth >= 0 ? 'Available for extra debt attack / savings' : 'Over budget — expenses exceed income'}</div>
+        <div class="kpi-val" style="color:${leftForMonth >= 0 ? 'var(--emerald)' : 'var(--red)'}">${leftValHtml}</div>
+        <div class="kpi-sub">${maskInc ? 'Hidden while income is concealed' : (leftForMonth >= 0 ? 'Available for extra debt attack / savings' : 'Over budget — expenses exceed income')}</div>
       </div>
     `;
+
+    const incListEl = document.getElementById('incomeList');
+    const incBannerEl = document.getElementById('incomeHiddenBanner');
+    const incToggleBtn = document.getElementById('incomeSectionToggleBtn');
+    if (incListEl && incBannerEl && incToggleBtn) {
+      incListEl.classList.toggle('hidden', maskInc);
+      incBannerEl.classList.toggle('hidden', !maskInc);
+      incToggleBtn.textContent = maskInc ? '👁️ Show' : '🙈 Hide';
+    }
 
     // Render Income List
     document.getElementById('incomeList').innerHTML = visIncomes.map(inc => `
@@ -1666,16 +1768,115 @@
     saveState(); renderAll();
   };
 
+  function evaluateChallengeLiveStatus(c) {
+    const startDate = c.createdAt || todayStr();
+    const endDate = c.deadline || '9999-12-31';
+    if (c.type === 'habit') {
+      // Check if any card charges (expenses) occurred on the target account (or any account if none specified) within the challenge window
+      const charges = (state.expenses || []).filter(e => {
+        const d = e.date || '';
+        const inWindow = d >= startDate && d <= endDate;
+        const matchesAcc = !c.accountId || e.accountId === c.accountId;
+        return inWindow && matchesAcc;
+      });
+      const totalCharged = charges.reduce((s, e) => s + Number(e.amount || 0), 0);
+      return { violated: charges.length > 0, chargeCount: charges.length, totalCharged };
+    }
+    if (c.type === 'amount' || c.type === 'balloon_amount') {
+      const relevantPays = (state.payments || []).filter(p => {
+        const d = p.date || '';
+        const inWindow = d >= startDate && d <= endDate;
+        const matchesAcc = !c.accountId || p.accountId === c.accountId;
+        const matchesType = c.type === 'balloon_amount' ? p.type === 'balloon' : (p.type === 'extra' || p.type === 'regular' || p.type === 'balloon');
+        return inWindow && matchesAcc && matchesType;
+      });
+      const paidSum = relevantPays.reduce((s, p) => s + Number(p.amount || 0), 0);
+      return { paidSum };
+    }
+    return {};
+  }
+
   function renderChallenges() {
     document.getElementById('profileXpGrid').innerHTML = state.profiles.map(p => `<div class="card"><div class="flex-between"><h3>${p.emoji} ${p.name}</h3><span class="pill pill-green">${p.xp} XP</span></div></div>`).join('');
-    document.getElementById('challengesGrid').innerHTML = state.challenges.map(c => `<div class="sub-card"><div class="flex-between"><strong>${c.title}</strong><span class="pill pill-amber">+${c.xp} XP</span></div><div class="row-actions"><button class="primary" onclick="completeChallenge('${c.id}')">Complete</button><button class="danger" onclick="deleteChallenge('${c.id}')">Remove</button></div></div>`).join('') || `<p style="color:var(--muted);">No challenges yet.</p>`;
+    document.getElementById('challengesGrid').innerHTML = state.challenges.map(c => {
+      const linkedAcc = c.accountId ? state.accounts.find(a => a.id === c.accountId) : null;
+      const accLabel = linkedAcc ? linkedAcc.name : (c.accountName || '');
+      const status = evaluateChallengeLiveStatus(c);
+
+      let statusBanner = '';
+      if (c.completed) {
+        statusBanner = `<span class="pill pill-green">✅ Completed</span>`;
+      } else if (c.type === 'habit') {
+        statusBanner = status.violated
+          ? `<span class="pill pill-red">⚠️ Touched (${status.chargeCount} charge${status.chargeCount > 1 ? 's' : ''}: ${fmt(status.totalCharged)})</span>`
+          : `<span class="pill pill-green">🛡️ Untouched (${fmt(0)} charged)</span>`;
+      } else if (status.paidSum !== undefined) {
+        const pct = Math.min(100, (status.paidSum / Math.max(1, Number(c.target || 1))) * 100);
+        statusBanner = `<span class="pill pill-blue">${fmt(status.paidSum)} / ${fmt(c.target)} (${pct.toFixed(0)}%)</span>`;
+      }
+
+      return `
+        <div class="sub-card">
+          <div class="flex-between">
+            <div>
+              <strong>${c.title}</strong>
+              <div style="font-size:0.78rem; color:var(--muted); margin-top:2px;">
+                ${accLabel ? `🏦 <strong>${accLabel}</strong> · ` : ''}${getProfileName(c.ownerId || 'JOINT')}${c.deadline ? ` · Due ${c.deadline}` : ''}
+              </div>
+              ${c.desc ? `<div style="font-size:0.8rem; color:var(--muted); margin-top:4px;">${c.desc}</div>` : ''}
+            </div>
+            <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+              <span class="pill pill-amber">+${c.xp} XP</span>
+              ${statusBanner}
+            </div>
+          </div>
+          <div class="row-actions">
+            ${!c.completed ? `<button class="primary" onclick="completeChallenge('${c.id}')">Complete</button>` : ''}
+            <button class="danger" onclick="deleteChallenge('${c.id}')">Remove</button>
+          </div>
+        </div>
+      `;
+    }).join('') || `<p style="color:var(--muted);">No challenges yet.</p>`;
     document.getElementById('rewardsGrid').innerHTML = state.rewards.map(r => `<div class="sub-card"><div class="flex-between"><strong>🎁 ${r.title}</strong><span class="pill pill-blue">${r.xpReq} XP</span></div><div class="row-actions"><button class="primary" onclick="claimReward('${r.id}')">${r.claimed ? 'Claimed' : 'Claim'}</button></div></div>`).join('') || `<p style="color:var(--muted);">No rewards yet.</p>`;
   }
 
-  window.completeChallenge = function(id) { const c = state.challenges.find(x => x.id === id); if (c && !c.completed) { c.completed = true; state.profiles.forEach(p => p.xp += Math.round(c.xp / state.profiles.length)); saveState(); renderAll(); } };
+  window.completeChallenge = function(id) {
+    const c = state.challenges.find(x => x.id === id);
+    if (c && !c.completed) {
+      c.completed = true;
+      if (c.ownerId && c.ownerId !== 'JOINT' && c.ownerId !== 'HOUSEHOLD') {
+        const prof = state.profiles.find(p => p.id === c.ownerId);
+        if (prof) prof.xp += Number(c.xp || 0);
+      } else {
+        state.profiles.forEach(p => p.xp += Math.round(Number(c.xp || 0) / state.profiles.length));
+      }
+      saveState();
+      renderAll();
+    }
+  };
   window.deleteChallenge = function(id) { state.challenges = state.challenges.filter(x => x.id !== id); saveState(); renderAll(); };
   window.claimReward = function(id) { const r = state.rewards.find(x => x.id === id); if (r) { r.claimed = true; saveState(); renderAll(); } };
-  window.addPresetChallenge = function(preset) { state.challenges.push({ id: 'chal_' + Date.now(), title: preset === 'balloon' ? '🎈 Balloon Starter: R1,500' : '🚫 30-Day No-Spend', ownerId: 'JOINT', type: 'amount', target: 1500, current: 0, xp: 300, deadline: todayStr(), completed: false }); saveState(); renderAll(); };
+  window.addPresetChallenge = function(preset) {
+    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10);
+    const creditCard = state.accounts.find(a => (a.category || '').toLowerCase().includes('credit')) || state.accounts[0];
+    state.challenges.push({
+      id: 'chal_' + Date.now(),
+      title: preset === 'balloon' ? '🎈 Balloon Starter: R1,500' : (creditCard ? `🚫 Don't Touch ${creditCard.name} This Month` : '🚫 30-Day No-Spend'),
+      desc: preset === 'balloon' ? 'Extra R1,500 towards balloon balance' : 'Zero new card swipes until month end',
+      accountId: preset === 'nospend' && creditCard ? creditCard.id : '',
+      accountName: preset === 'nospend' && creditCard ? creditCard.name : '',
+      ownerId: 'JOINT',
+      type: preset === 'balloon' ? 'balloon_amount' : 'habit',
+      target: preset === 'balloon' ? 1500 : 30,
+      current: 0,
+      xp: 300,
+      createdAt: todayStr(),
+      deadline: endOfMonth,
+      completed: false
+    });
+    saveState();
+    renderAll();
+  };
 
   window.setTransactionMode = function(mode) {
     document.getElementById('txMode').value = mode;
@@ -1908,8 +2109,58 @@
     state.monthlyBudgetExpenses = state.monthlyBudgetExpenses.filter(e => e.linkedAccountId !== id);
     saveState(); renderAll();
   };
-  window.openChallengeModal = function() { document.getElementById('chalOwner').innerHTML = `<option value="JOINT">🤝 Joint</option>`; document.getElementById('chalDeadline').value = todayStr(); document.getElementById('challengeModal').showModal(); };
-  window.saveChallenge = function(e) { e.preventDefault(); state.challenges.push({ id: 'chal_' + Date.now(), title: document.getElementById('chalTitle').value, desc: document.getElementById('chalDesc').value, type: document.getElementById('chalType').value, target: Number(document.getElementById('chalTarget').value), current: 0, ownerId: 'JOINT', xp: Number(document.getElementById('chalXp').value), deadline: document.getElementById('chalDeadline').value, completed: false }); saveState(); document.getElementById('challengeModal').close(); renderAll(); };
+  window.toggleChallengeTargetField = function() {
+    const type = document.getElementById('chalType').value;
+    const lbl = document.getElementById('chalTargetLabel');
+    const inp = document.getElementById('chalTarget');
+    if (type === 'habit') {
+      lbl.textContent = 'Target Streak (Days)';
+      if (!inp.value || Number(inp.value) >= 500) inp.value = 30;
+    } else {
+      lbl.textContent = 'Target Amount (R)';
+      if (!inp.value || Number(inp.value) <= 31) inp.value = 2000;
+    }
+  };
+
+  window.openChallengeModal = function() {
+    const sortedAccs = [...state.accounts].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }));
+    document.getElementById('chalAccountId').innerHTML = `<option value="">-- Any / All Accounts --</option>` +
+      sortedAccs.map(a => `<option value="${a.id}">${a.name} (${a.category})</option>`).join('');
+    document.getElementById('chalOwner').innerHTML = `<option value="JOINT">🤝 Joint / Household</option>` +
+      state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+
+    const endOfMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10);
+    document.getElementById('chalTitle').value = '';
+    document.getElementById('chalDesc').value = '';
+    document.getElementById('chalType').value = 'habit';
+    toggleChallengeTargetField();
+    document.getElementById('chalDeadline').value = endOfMonth;
+    document.getElementById('challengeModal').showModal();
+  };
+
+  window.saveChallenge = function(e) {
+    e.preventDefault();
+    const accountId = document.getElementById('chalAccountId').value;
+    const acc = accountId ? state.accounts.find(a => a.id === accountId) : null;
+    state.challenges.push({
+      id: 'chal_' + Date.now(),
+      title: document.getElementById('chalTitle').value.trim(),
+      desc: document.getElementById('chalDesc').value.trim(),
+      accountId: accountId || '',
+      accountName: acc ? acc.name : '',
+      type: document.getElementById('chalType').value,
+      target: Number(document.getElementById('chalTarget').value),
+      current: 0,
+      ownerId: document.getElementById('chalOwner').value || 'JOINT',
+      xp: Number(document.getElementById('chalXp').value),
+      createdAt: todayStr(),
+      deadline: document.getElementById('chalDeadline').value,
+      completed: false
+    });
+    saveState();
+    document.getElementById('challengeModal').close();
+    renderAll();
+  };
   window.openRewardModal = function() { document.getElementById('rewOwner').innerHTML = `<option value="JOINT">🤝 Joint</option>`; document.getElementById('rewardModal').showModal(); };
   window.saveReward = function(e) { e.preventDefault(); state.rewards.push({ id: 'rew_' + Date.now(), title: document.getElementById('rewTitle').value, ownerId: 'JOINT', xpReq: Number(document.getElementById('rewXp').value), claimed: false }); saveState(); document.getElementById('rewardModal').close(); renderAll(); };
 
@@ -1946,6 +2197,7 @@
   function renderAll() {
     if (!state || !currentUser) return;
     document.documentElement.className = state.theme || 'dark';
+    applyPrivacyUI();
     populateSelectors();
     renderKPIs();
     renderAccounts();
