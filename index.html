@@ -534,14 +534,14 @@
 <dialog id="transactionModal">
   <h3 id="txModalTitle" style="margin-bottom:14px;">Log Transaction</h3>
   <form onsubmit="saveTransaction(event)">
-    <!-- Mode Selector: Payment vs Debit -->
+    <!-- Mode Selector: Debit (Card Charge) on left vs Payment on right -->
     <div class="form-group">
       <label>Transaction Type</label>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-        <button type="button" id="txModePaymentBtn" class="primary" onclick="setTransactionMode('payment')">💸 Payment (Credit / Paydown)</button>
-        <button type="button" id="txModeDebitBtn" class="ghost" onclick="setTransactionMode('debit')">💳 Debit (Card Charge)</button>
+        <button type="button" id="txModeDebitBtn" class="amber" onclick="setTransactionMode('debit')">💳 Debit (Card Charge)</button>
+        <button type="button" id="txModePaymentBtn" class="ghost" onclick="setTransactionMode('payment')">💸 Payment (Credit / Paydown)</button>
       </div>
-      <input type="hidden" id="txMode" value="payment" />
+      <input type="hidden" id="txMode" value="debit" />
     </div>
 
     <div class="form-row">
@@ -1527,7 +1527,7 @@
       return alert('Add a debt account or an Adhoc budget category first.');
     }
 
-    let mode = opts.mode || 'payment';
+    let mode = opts.mode || 'debit';
     let type = opts.type || 'regular';
     if (!state.accounts.length && adhocCats.length) {
       mode = 'payment';
