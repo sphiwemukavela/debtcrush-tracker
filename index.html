@@ -520,7 +520,7 @@
     </div>
     <div class="form-row hidden" id="bExpAdhocFields">
       <div class="form-group"><label>Estimated Budget (R)</label><input type="number" id="bExpEstimatedAmount" step="0.01" min="0" placeholder="0.00" /></div>
-      <div class="form-group"><label>Actual Budget (R) — Counts to Total</label><input type="number" id="bExpActualAmount" step="0.01" min="0" placeholder="0.00" /></div>
+      <div class="form-group"><label>Actual Spend (R) — Auto from Ledger</label><input type="number" id="bExpActualAmount" step="0.01" min="0" placeholder="0.00" readonly style="opacity:0.75; cursor:not-allowed;" title="Accumulated automatically from Adhoc entries in the Ledger" /></div>
     </div>
     <div class="form-row">
       <div class="form-group"><label>Assigned To</label><select id="bExpOwnerId"></select></div>
@@ -534,24 +534,29 @@
 </dialog>
 
 <dialog id="paymentModal">
-  <h3 style="margin-bottom:14px;">Log Debt Payment</h3>
+  <h3 id="payModalTitle" style="margin-bottom:14px;">Log Payment</h3>
   <form onsubmit="savePayment(event)">
-    <div class="form-group"><label>Account</label><select id="payAccountId" required></select></div>
     <div class="form-row">
       <div class="form-group"><label>Paid By</label><select id="payProfileId" required></select></div>
       <div class="form-group"><label>Payment Type</label>
-        <select id="payType">
+        <select id="payType" onchange="togglePayTypeFields()">
           <option value="regular">Regular Installment</option>
           <option value="extra">Extra Principal Attack</option>
           <option value="balloon">🎈 Balloon Sinking / Reduction</option>
+          <option value="adhoc">🧾 Adhoc Expense (Budget Linked)</option>
         </select>
       </div>
     </div>
+    <div class="form-group" id="payAccountGroup"><label>Account</label><select id="payAccountId"></select></div>
+    <div class="form-group hidden" id="payBudgetCategoryGroup">
+      <label>Adhoc Budget Category</label>
+      <select id="payBudgetCategoryId"></select>
+    </div>
     <div class="form-row">
-      <div class="form-group"><label>Amount (R)</label><input type="number" id="payAmount" step="0.01" min="1" required /></div>
+      <div class="form-group"><label>Amount (R)</label><input type="number" id="payAmount" step="0.01" min="0.01" required /></div>
       <div class="form-group"><label>Date</label><input type="date" id="payDate" required /></div>
     </div>
-    <div class="form-group"><label>Notes</label><input type="text" id="payNotes" /></div>
+    <div class="form-group"><label>Notes</label><input type="text" id="payNotes" placeholder="e.g., Merchant or item description" /></div>
     <div class="row-actions" style="justify-content:flex-end;">
       <button type="button" class="ghost" onclick="document.getElementById('paymentModal').close()">Cancel</button>
       <button type="submit" class="primary">Save Payment</button>
@@ -837,6 +842,18 @@
   }
 
   /* ==================== INTERLINKING & AUTO-TICK ENGINE ==================== */
+  function getAdhocLedgerActual(budgetExpenseId, targetYearMonth) {
+    if (!state || !budgetExpenseId) return 0;
+    const activeYM = targetYearMonth || state.budgetMonth || new Date().toISOString().slice(0, 7);
+    const paySum = (state.payments || [])
+      .filter(p => p.type === 'adhoc' && p.budgetCategoryId === budgetExpenseId && (p.date || '').startsWith(activeYM))
+      .reduce((s, p) => s + Number(p.amount || 0), 0);
+    const expSum = (state.expenses || [])
+      .filter(e => (e.spendType === 'adhoc' || e.type === 'adhoc') && e.budgetCategoryId === budgetExpenseId && (e.date || '').startsWith(activeYM))
+      .reduce((s, e) => s + Number(e.amount || 0), 0);
+    return paySum + expSum;
+  }
+
   function syncAccountWithBudgetExpense(acc) {
     if (!state || !acc) return false;
     let changed = false;
@@ -1052,7 +1069,7 @@
 
     const getEffectiveExpenseAmount = (e) => {
       if ((e.category || '').toLowerCase() === 'adhoc') {
-        return Number(e.actualAmount ?? e.amount ?? 0);
+        return getAdhocLedgerActual(e.id, state.budgetMonth);
       }
       return Number(e.amount || 0);
     };
@@ -1133,6 +1150,7 @@
               <strong>${fmt(effectiveAmt)}</strong>
               ${isAdhoc ? `<div style="font-size:0.7rem; color:var(--muted);">Est: ${fmt(estAmt)}</div>` : ''}
             </div>
+            ${isAdhoc ? `<button class="primary" style="padding:5px 8px; font-size:0.75rem;" onclick="openPaymentModal('', 'adhoc', '', '${exp.id}')" title="Log an Adhoc ledger entry to this category">+ Log</button>` : ''}
             <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
             <button class="danger" style="padding:5px 8px;" onclick="deleteBudgetExpenseItem('${exp.id}')">✕</button>
           </div>
@@ -1194,7 +1212,7 @@
     adhocGroup.classList.toggle('hidden', !isAdhoc);
     stdInput.required = !isAdhoc;
     estInput.required = isAdhoc;
-    actInput.required = isAdhoc;
+    actInput.required = false;
   };
 
   window.openBudgetExpenseModal = function(id) {
@@ -1209,7 +1227,7 @@
     const isAdhoc = catVal.toLowerCase() === 'adhoc';
     document.getElementById('bExpAmount').value = item && !isAdhoc ? item.amount : '';
     document.getElementById('bExpEstimatedAmount').value = item && isAdhoc ? (item.estimatedAmount ?? '') : '';
-    document.getElementById('bExpActualAmount').value = item && isAdhoc ? (item.actualAmount ?? item.amount ?? '') : '';
+    document.getElementById('bExpActualAmount').value = item && isAdhoc ? getAdhocLedgerActual(item.id, state.budgetMonth).toFixed(2) : '0.00';
     toggleAdhocBudgetFields();
     sel.value = item ? item.ownerId : 'JOINT';
     document.getElementById('bExpDueDay').value = item ? (item.dueDay || '') : '';
@@ -1224,12 +1242,13 @@
     const categoryVal = document.getElementById('bExpCategory').value;
     const isAdhoc = categoryVal.toLowerCase() === 'adhoc';
     const estVal = isAdhoc ? Number(document.getElementById('bExpEstimatedAmount').value || 0) : null;
-    const actVal = isAdhoc ? Number(document.getElementById('bExpActualAmount').value || 0) : null;
+    const itemId = id || ('bexp_' + Date.now());
+    const actVal = isAdhoc ? getAdhocLedgerActual(itemId, state.budgetMonth) : null;
     const amtVal = isAdhoc ? actVal : Number(document.getElementById('bExpAmount').value || 0);
     const ownerVal = document.getElementById('bExpOwnerId').value;
 
     const payload = {
-      id: id || ('bexp_' + Date.now()),
+      id: itemId,
       linkedAccountId: existing ? existing.linkedAccountId : null,
       name: document.getElementById('bExpName').value.trim(),
       category: categoryVal,
@@ -1359,18 +1378,52 @@
   /* ==================== 4. LEDGER & 5. CHALLENGES ==================== */
   function renderActivity() {
     const items = [
-      ...state.payments.map(p => ({ kind: 'payment', id: p.id, date: p.date, accountName: p.accountName, member: getProfileName(p.paidByProfileId), detail: `${p.type.toUpperCase()} — ${p.notes || ''}`, amount: p.amount, subType: p.type })),
+      ...state.payments.map(p => {
+        const isAdhoc = p.type === 'adhoc';
+        const catObj = isAdhoc ? state.monthlyBudgetExpenses.find(b => b.id === p.budgetCategoryId) : null;
+        const targetLabel = isAdhoc ? (catObj ? catObj.name : (p.budgetCategoryName || 'Adhoc Budget')) : p.accountName;
+        return {
+          kind: 'payment',
+          id: p.id,
+          date: p.date,
+          accountName: targetLabel,
+          member: getProfileName(p.paidByProfileId),
+          detail: `${p.type.toUpperCase()} — ${p.notes || ''}`,
+          amount: p.amount,
+          subType: p.type
+        };
+      }),
       ...state.expenses.map(e => ({ kind: 'expense', id: e.id, date: e.date, accountName: e.accountName, member: getProfileName(e.spentByProfileId), detail: `${e.category} — ${e.notes || ''}`, amount: e.amount, subType: e.spendType }))
     ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-    document.getElementById('ledgerBody').innerHTML = items.map(it => `
-      <tr>
-        <td>${it.date}</td>
-        <td>${it.kind === 'payment' ? `<span class="pill ${it.subType === 'balloon' ? 'pill-amber' : 'pill-green'}">${it.subType === 'balloon' ? '🎈 Balloon Pay' : 'Payment'}</span>` : `<span class="pill pill-red">Card Charge</span>`}</td>
-        <td>${it.accountName}</td><td>${it.member}</td><td>${it.detail}</td>
-        <td style="font-weight:700; color:${it.kind === 'payment' ? 'var(--emerald)' : 'var(--red)'}">${it.kind === 'payment' ? '-' : '+'}${fmt(it.amount)}</td>
-        <td><button class="danger" onclick="revertEntry('${it.kind}', '${it.id}')">Undo</button></td>
-      </tr>
-    `).join('') || `<tr><td colspan="7" style="color:var(--muted);">No activity logged yet.</td></tr>`;
+    document.getElementById('ledgerBody').innerHTML = items.map(it => {
+      let badgeHtml = `<span class="pill pill-red">Card Charge</span>`;
+      let amtColor = 'var(--red)';
+      let prefix = '+';
+      if (it.kind === 'payment') {
+        if (it.subType === 'balloon') {
+          badgeHtml = `<span class="pill pill-amber">🎈 Balloon Pay</span>`;
+          amtColor = 'var(--emerald)';
+          prefix = '-';
+        } else if (it.subType === 'adhoc') {
+          badgeHtml = `<span class="pill pill-amber">🧾 Adhoc</span>`;
+          amtColor = 'var(--amber)';
+          prefix = '';
+        } else {
+          badgeHtml = `<span class="pill pill-green">Payment</span>`;
+          amtColor = 'var(--emerald)';
+          prefix = '-';
+        }
+      }
+      return `
+        <tr>
+          <td>${it.date}</td>
+          <td>${badgeHtml}</td>
+          <td>${it.accountName}</td><td>${it.member}</td><td>${it.detail}</td>
+          <td style="font-weight:700; color:${amtColor}">${prefix}${fmt(it.amount)}</td>
+          <td><button class="danger" onclick="revertEntry('${it.kind}', '${it.id}')">Undo</button></td>
+        </tr>
+      `;
+    }).join('') || `<tr><td colspan="7" style="color:var(--muted);">No activity logged yet.</td></tr>`;
   }
 
   window.revertEntry = function(kind, id) {
@@ -1378,8 +1431,10 @@
       const idx = state.payments.findIndex(p => p.id === id);
       if (idx > -1) {
         const p = state.payments[idx];
-        const acc = state.accounts.find(a => a.id === p.accountId);
-        if (acc) { acc.currentBalance = Number(acc.currentBalance) + Number(p.amount); if (p.type === 'balloon') acc.balloonAmount = Number(acc.balloonAmount || 0) + Number(p.amount); }
+        if (p.type !== 'adhoc' && p.accountId) {
+          const acc = state.accounts.find(a => a.id === p.accountId);
+          if (acc) { acc.currentBalance = Number(acc.currentBalance) + Number(p.amount); if (p.type === 'balloon') acc.balloonAmount = Number(acc.balloonAmount || 0) + Number(p.amount); }
+        }
         state.payments.splice(idx, 1);
       }
     } else {
@@ -1405,27 +1460,83 @@
   window.claimReward = function(id) { const r = state.rewards.find(x => x.id === id); if (r) { r.claimed = true; saveState(); renderAll(); } };
   window.addPresetChallenge = function(preset) { state.challenges.push({ id: 'chal_' + Date.now(), title: preset === 'balloon' ? '🎈 Balloon Starter: R1,500' : '🚫 30-Day No-Spend', ownerId: 'JOINT', type: 'amount', target: 1500, current: 0, xp: 300, deadline: todayStr(), completed: false }); saveState(); renderAll(); };
 
-  window.openPaymentModal = function(accId, type = 'regular', amount = '') {
-    if (!state.accounts.length) return alert('Add a debt account first.');
+  window.togglePayTypeFields = function() {
+    const isAdhoc = document.getElementById('payType').value === 'adhoc';
+    const accGroup = document.getElementById('payAccountGroup');
+    const catGroup = document.getElementById('payBudgetCategoryGroup');
+    const accSel = document.getElementById('payAccountId');
+    const catSel = document.getElementById('payBudgetCategoryId');
+
+    accGroup.classList.toggle('hidden', isAdhoc);
+    catGroup.classList.toggle('hidden', !isAdhoc);
+    accSel.required = !isAdhoc;
+    catSel.required = isAdhoc;
+    document.getElementById('payModalTitle').textContent = isAdhoc ? 'Log Adhoc Expense' : 'Log Debt Payment';
+  };
+
+  window.openPaymentModal = function(accId, type = 'regular', amount = '', budgetCatId = '') {
+    const adhocCats = state.monthlyBudgetExpenses.filter(e => (e.category || '').toLowerCase() === 'adhoc');
+    if (type !== 'adhoc' && !state.accounts.length && !adhocCats.length) {
+      return alert('Add a debt account or an Adhoc budget category first.');
+    }
+    if (type !== 'adhoc' && !state.accounts.length && adhocCats.length) {
+      type = 'adhoc';
+    }
+
     document.getElementById('payAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
     if (accId) document.getElementById('payAccountId').value = accId;
+
+    document.getElementById('payBudgetCategoryId').innerHTML = adhocCats.length
+      ? adhocCats.map(c => `<option value="${c.id}">${c.name} (Est: ${fmt(c.estimatedAmount || 0)})</option>`).join('')
+      : `<option value="">-- Create an Adhoc Budget Expense first --</option>`;
+    if (budgetCatId) document.getElementById('payBudgetCategoryId').value = budgetCatId;
+
     document.getElementById('payProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
     document.getElementById('payType').value = type;
     document.getElementById('payAmount').value = amount;
     document.getElementById('payDate').value = todayStr();
+    document.getElementById('payNotes').value = '';
+    togglePayTypeFields();
     document.getElementById('paymentModal').showModal();
   };
 
   window.savePayment = function(e) {
     e.preventDefault();
-    const accountId = document.getElementById('payAccountId').value;
     const paidByProfileId = document.getElementById('payProfileId').value;
     const type = document.getElementById('payType').value;
     const amount = Number(document.getElementById('payAmount').value);
     const date = document.getElementById('payDate').value;
     const notes = document.getElementById('payNotes').value;
+    if (amount <= 0) return;
+
+    if (type === 'adhoc') {
+      const budgetCategoryId = document.getElementById('payBudgetCategoryId').value;
+      const bItem = state.monthlyBudgetExpenses.find(b => b.id === budgetCategoryId);
+      if (!bItem) {
+        alert('Please add an Adhoc expense category in the Monthly Budget tab first.');
+        return;
+      }
+      state.payments.push({
+        id: 'pay_' + Date.now(),
+        accountId: null,
+        accountName: bItem.name,
+        budgetCategoryId: bItem.id,
+        budgetCategoryName: bItem.name,
+        paidByProfileId,
+        type: 'adhoc',
+        amount,
+        date,
+        notes
+      });
+      saveState();
+      document.getElementById('paymentModal').close();
+      renderAll();
+      return;
+    }
+
+    const accountId = document.getElementById('payAccountId').value;
     const acc = state.accounts.find(a => a.id === accountId);
-    if (!acc || amount <= 0) return;
+    if (!acc) return;
     acc.currentBalance = Math.max(0, Number(acc.currentBalance) - amount);
     if (type === 'balloon' && acc.balloonAmount > 0) acc.balloonAmount = Math.max(0, Number(acc.balloonAmount) - amount);
     state.payments.push({ id: 'pay_' + Date.now(), accountId, accountName: acc.name, paidByProfileId, type, amount, date, notes });
