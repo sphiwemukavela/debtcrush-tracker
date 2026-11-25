@@ -260,8 +260,7 @@
       <select id="profileFilter" title="Active Profile View">
         <option value="HOUSEHOLD">🏠 Household (All)</option>
       </select>
-      <button class="primary" onclick="openPaymentModal()">+ Payment</button>
-      <button class="amber" onclick="openExpenseModal()">+ Card Charge</button>
+      <button class="primary" onclick="openTransactionModal()">+ Transaction</button>
 
       <div class="dropdown">
         <button class="ghost" onclick="toggleMoreMenu(event)">⚙️ Manage ▾</button>
@@ -438,8 +437,7 @@
           <p style="font-size:0.82rem; color:var(--muted);">History of debt repayments and credit/store card swipes</p>
         </div>
         <div style="display:flex; gap:8px;">
-          <button class="primary" onclick="openPaymentModal()">+ Payment</button>
-          <button class="amber" onclick="openExpenseModal()">+ Card Charge</button>
+          <button class="primary" onclick="openTransactionModal()">+ Transaction</button>
         </div>
       </div>
       <div style="overflow-x:auto;">
@@ -533,60 +531,77 @@
   </form>
 </dialog>
 
-<dialog id="paymentModal">
-  <h3 id="payModalTitle" style="margin-bottom:14px;">Log Payment</h3>
-  <form onsubmit="savePayment(event)">
+<dialog id="transactionModal">
+  <h3 id="txModalTitle" style="margin-bottom:14px;">Log Transaction</h3>
+  <form onsubmit="saveTransaction(event)">
+    <!-- Mode Selector: Payment vs Debit -->
+    <div class="form-group">
+      <label>Transaction Type</label>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+        <button type="button" id="txModePaymentBtn" class="primary" onclick="setTransactionMode('payment')">💸 Payment (Credit / Paydown)</button>
+        <button type="button" id="txModeDebitBtn" class="ghost" onclick="setTransactionMode('debit')">💳 Debit (Card Charge)</button>
+      </div>
+      <input type="hidden" id="txMode" value="payment" />
+    </div>
+
     <div class="form-row">
-      <div class="form-group"><label>Paid By</label><select id="payProfileId" required></select></div>
-      <div class="form-group"><label>Payment Type</label>
-        <select id="payType" onchange="togglePayTypeFields()">
+      <div class="form-group"><label id="txMemberLabel">Paid By</label><select id="txProfileId" required></select></div>
+
+      <!-- Payment Sub-Type (shown when Mode === 'payment') -->
+      <div class="form-group" id="txPayTypeGroup">
+        <label>Payment Category</label>
+        <select id="txPayType" onchange="toggleTxSubFields()">
           <option value="regular">Regular Installment</option>
           <option value="extra">Extra Principal Attack</option>
           <option value="balloon">🎈 Balloon Sinking / Reduction</option>
           <option value="adhoc">🧾 Adhoc Expense (Budget Linked)</option>
         </select>
       </div>
-    </div>
-    <div class="form-group" id="payAccountGroup"><label>Account</label><select id="payAccountId"></select></div>
-    <div class="form-group hidden" id="payBudgetCategoryGroup">
-      <label>Adhoc Budget Category</label>
-      <select id="payBudgetCategoryId"></select>
-    </div>
-    <div class="form-row">
-      <div class="form-group"><label>Amount (R)</label><input type="number" id="payAmount" step="0.01" min="0.01" required /></div>
-      <div class="form-group"><label>Date</label><input type="date" id="payDate" required /></div>
-    </div>
-    <div class="form-group"><label>Notes</label><input type="text" id="payNotes" placeholder="e.g., Merchant or item description" /></div>
-    <div class="row-actions" style="justify-content:flex-end;">
-      <button type="button" class="ghost" onclick="document.getElementById('paymentModal').close()">Cancel</button>
-      <button type="submit" class="primary">Save Payment</button>
-    </div>
-  </form>
-</dialog>
 
-<dialog id="expenseModal">
-  <h3 style="margin-bottom:14px;">💳 Log Card Charge</h3>
-  <form onsubmit="saveExpense(event)">
-    <div class="form-group"><label>Card / Account</label><select id="expAccountId" required></select></div>
-    <div class="form-row">
-      <div class="form-group"><label>Spent By</label><select id="expProfileId" required></select></div>
-      <div class="form-group"><label>Nature</label>
-        <select id="expSpendType"><option value="essential">Essential Need</option><option value="discretionary">Discretionary / Want</option></select>
+      <!-- Debit Nature (shown when Mode === 'debit') -->
+      <div class="form-group hidden" id="txDebitNatureGroup">
+        <label>Nature</label>
+        <select id="txSpendType">
+          <option value="essential">Essential Need</option>
+          <option value="discretionary">Discretionary / Want</option>
+        </select>
       </div>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>Category</label>
-        <select id="expCategory"><option>Groceries</option><option>Fuel & Auto</option><option>Utilities & Bills</option><option>Dining & Family</option><option>Emergency / Medical</option><option>Shopping</option><option>Other</option></select>
-      </div>
-      <div class="form-group"><label>Amount (R)</label><input type="number" id="expAmount" step="0.01" min="1" required /></div>
+
+    <!-- Account Selector (hidden for Adhoc payment) -->
+    <div class="form-group" id="txAccountGroup">
+      <label id="txAccountLabel">Account</label>
+      <select id="txAccountId"></select>
     </div>
-    <div class="form-row">
-      <div class="form-group"><label>Date</label><input type="date" id="expDate" required /></div>
-      <div class="form-group"><label>Merchant / Note</label><input type="text" id="expNotes" /></div>
+
+    <!-- Adhoc Budget Category Selector (shown only for Adhoc payment) -->
+    <div class="form-group hidden" id="txBudgetCategoryGroup">
+      <label>Adhoc Budget Category</label>
+      <select id="txBudgetCategoryId"></select>
     </div>
+
+    <!-- Debit Spend Category (shown only when Mode === 'debit') -->
+    <div class="form-group hidden" id="txDebitCategoryGroup">
+      <label>Spend Category</label>
+      <select id="txDebitCategory">
+        <option>Groceries</option>
+        <option>Fuel & Auto</option>
+        <option>Utilities & Bills</option>
+        <option>Dining & Family</option>
+        <option>Emergency / Medical</option>
+        <option>Shopping</option>
+        <option>Other</option>
+      </select>
+    </div>
+
+    <div class="form-row">
+      <div class="form-group"><label>Amount (R)</label><input type="number" id="txAmount" step="0.01" min="0.01" required /></div>
+      <div class="form-group"><label>Date</label><input type="date" id="txDate" required /></div>
+    </div>
+    <div class="form-group"><label>Merchant / Notes</label><input type="text" id="txNotes" placeholder="e.g., Merchant or item description" /></div>
     <div class="row-actions" style="justify-content:flex-end;">
-      <button type="button" class="ghost" onclick="document.getElementById('expenseModal').close()">Cancel</button>
-      <button type="submit" class="amber">Log Charge</button>
+      <button type="button" class="ghost" onclick="document.getElementById('transactionModal').close()">Cancel</button>
+      <button type="submit" id="txSubmitBtn" class="primary">Save Payment</button>
     </div>
   </form>
 </dialog>
@@ -1018,8 +1033,8 @@
           <div class="progress-bar"><div class="progress-fill" style="width:${pct.toFixed(1)}%"></div></div>
           <div style="font-size:0.8rem; color:var(--muted);" class="flex-between"><span>Min: <strong>${fmt(acc.minPayment)}</strong></span>${hasBalloon ? `<span>🎈 ${fmt(acc.balloonAmount)}</span>` : ''}</div>
           <div class="row-actions">
-            <button class="primary" onclick="openPaymentModal('${acc.id}')">+ Pay</button>
-            <button class="ghost" onclick="openExpenseModal('${acc.id}')">+ Charge</button>
+            <button class="primary" onclick="openTransactionModal({ mode: 'payment', accId: '${acc.id}' })">+ Pay</button>
+            <button class="ghost" onclick="openTransactionModal({ mode: 'debit', accId: '${acc.id}' })">+ Debit</button>
             <button class="ghost" onclick="openAccountModal('${acc.id}')">Edit</button>
             <button class="danger" onclick="deleteAccount('${acc.id}')">Delete</button>
           </div>
@@ -1150,7 +1165,7 @@
               <strong>${fmt(effectiveAmt)}</strong>
               ${isAdhoc ? `<div style="font-size:0.7rem; color:var(--muted);">Est: ${fmt(estAmt)}</div>` : ''}
             </div>
-            ${isAdhoc ? `<button class="primary" style="padding:5px 8px; font-size:0.75rem;" onclick="openPaymentModal('', 'adhoc', '', '${exp.id}')" title="Log an Adhoc ledger entry to this category">+ Log</button>` : ''}
+            ${isAdhoc ? `<button class="primary" style="padding:5px 8px; font-size:0.75rem;" onclick="openTransactionModal({ mode: 'payment', type: 'adhoc', budgetCatId: '${exp.id}' })" title="Log an Adhoc ledger entry to this category">+ Log</button>` : ''}
             <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
             <button class="danger" style="padding:5px 8px;" onclick="deleteBudgetExpenseItem('${exp.id}')">✕</button>
           </div>
@@ -1373,7 +1388,7 @@
     `;
     document.getElementById('balloonChartWrap').innerHTML = `<svg class="chart" viewBox="0 0 600 200"><line x1="30" y1="180" x2="570" y2="180" stroke="#334155" /><path d="${toPath(stdPts)}" fill="none" stroke="#f59e0b" stroke-width="3" stroke-dasharray="6 4" /><path d="${toPath(atkPts)}" fill="none" stroke="#10b981" stroke-width="3.5" /></svg>`;
   };
-  window.quickLogBalloon = function() { openPaymentModal(state.selectedBalloonAccountId, 'balloon', state.balloonSimExtraMonthly || 1500); };
+  window.quickLogBalloon = function() { openTransactionModal({ mode: 'payment', accId: state.selectedBalloonAccountId, type: 'balloon', amount: state.balloonSimExtraMonthly || 1500 }); };
 
   /* ==================== 4. LEDGER & 5. CHALLENGES ==================== */
   function renderActivity() {
@@ -1460,57 +1475,127 @@
   window.claimReward = function(id) { const r = state.rewards.find(x => x.id === id); if (r) { r.claimed = true; saveState(); renderAll(); } };
   window.addPresetChallenge = function(preset) { state.challenges.push({ id: 'chal_' + Date.now(), title: preset === 'balloon' ? '🎈 Balloon Starter: R1,500' : '🚫 30-Day No-Spend', ownerId: 'JOINT', type: 'amount', target: 1500, current: 0, xp: 300, deadline: todayStr(), completed: false }); saveState(); renderAll(); };
 
-  window.togglePayTypeFields = function() {
-    const isAdhoc = document.getElementById('payType').value === 'adhoc';
-    const accGroup = document.getElementById('payAccountGroup');
-    const catGroup = document.getElementById('payBudgetCategoryGroup');
-    const accSel = document.getElementById('payAccountId');
-    const catSel = document.getElementById('payBudgetCategoryId');
+  window.setTransactionMode = function(mode) {
+    document.getElementById('txMode').value = mode;
+    const isDebit = mode === 'debit';
+
+    const payBtn = document.getElementById('txModePaymentBtn');
+    const debBtn = document.getElementById('txModeDebitBtn');
+    payBtn.className = isDebit ? 'ghost' : 'primary';
+    debBtn.className = isDebit ? 'amber' : 'ghost';
+
+    document.getElementById('txMemberLabel').textContent = isDebit ? 'Spent By' : 'Paid By';
+    document.getElementById('txPayTypeGroup').classList.toggle('hidden', isDebit);
+    document.getElementById('txDebitNatureGroup').classList.toggle('hidden', !isDebit);
+    document.getElementById('txDebitCategoryGroup').classList.toggle('hidden', !isDebit);
+
+    const submitBtn = document.getElementById('txSubmitBtn');
+    submitBtn.className = isDebit ? 'amber' : 'primary';
+    submitBtn.textContent = isDebit ? 'Log Debit / Charge' : 'Save Payment';
+
+    toggleTxSubFields();
+  };
+
+  window.toggleTxSubFields = function() {
+    const mode = document.getElementById('txMode').value;
+    const isDebit = mode === 'debit';
+    const isAdhoc = !isDebit && document.getElementById('txPayType').value === 'adhoc';
+
+    const accGroup = document.getElementById('txAccountGroup');
+    const catGroup = document.getElementById('txBudgetCategoryGroup');
+    const accSel = document.getElementById('txAccountId');
+    const catSel = document.getElementById('txBudgetCategoryId');
 
     accGroup.classList.toggle('hidden', isAdhoc);
     catGroup.classList.toggle('hidden', !isAdhoc);
     accSel.required = !isAdhoc;
     catSel.required = isAdhoc;
-    document.getElementById('payModalTitle').textContent = isAdhoc ? 'Log Adhoc Expense' : 'Log Debt Payment';
+
+    document.getElementById('txAccountLabel').textContent = isDebit ? 'Card / Account' : 'Account';
+    if (isDebit) {
+      document.getElementById('txModalTitle').textContent = '💳 Log Debit / Card Charge';
+    } else if (isAdhoc) {
+      document.getElementById('txModalTitle').textContent = '🧾 Log Adhoc Expense';
+    } else {
+      document.getElementById('txModalTitle').textContent = '💸 Log Debt Payment';
+    }
   };
 
-  window.openPaymentModal = function(accId, type = 'regular', amount = '', budgetCatId = '') {
+  window.openTransactionModal = function(opts = {}) {
     const adhocCats = state.monthlyBudgetExpenses.filter(e => (e.category || '').toLowerCase() === 'adhoc');
-    if (type !== 'adhoc' && !state.accounts.length && !adhocCats.length) {
+    if (!state.accounts.length && !adhocCats.length) {
       return alert('Add a debt account or an Adhoc budget category first.');
     }
-    if (type !== 'adhoc' && !state.accounts.length && adhocCats.length) {
+
+    let mode = opts.mode || 'payment';
+    let type = opts.type || 'regular';
+    if (!state.accounts.length && adhocCats.length) {
+      mode = 'payment';
       type = 'adhoc';
     }
 
-    document.getElementById('payAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-    if (accId) document.getElementById('payAccountId').value = accId;
+    document.getElementById('txAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    if (opts.accId) document.getElementById('txAccountId').value = opts.accId;
 
-    document.getElementById('payBudgetCategoryId').innerHTML = adhocCats.length
+    document.getElementById('txBudgetCategoryId').innerHTML = adhocCats.length
       ? adhocCats.map(c => `<option value="${c.id}">${c.name} (Est: ${fmt(c.estimatedAmount || 0)})</option>`).join('')
       : `<option value="">-- Create an Adhoc Budget Expense first --</option>`;
-    if (budgetCatId) document.getElementById('payBudgetCategoryId').value = budgetCatId;
+    if (opts.budgetCatId) document.getElementById('txBudgetCategoryId').value = opts.budgetCatId;
 
-    document.getElementById('payProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
-    document.getElementById('payType').value = type;
-    document.getElementById('payAmount').value = amount;
-    document.getElementById('payDate').value = todayStr();
-    document.getElementById('payNotes').value = '';
-    togglePayTypeFields();
-    document.getElementById('paymentModal').showModal();
+    document.getElementById('txProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
+    document.getElementById('txPayType').value = type;
+    document.getElementById('txAmount').value = opts.amount || '';
+    document.getElementById('txDate').value = todayStr();
+    document.getElementById('txNotes').value = '';
+
+    setTransactionMode(mode);
+    document.getElementById('transactionModal').showModal();
   };
 
-  window.savePayment = function(e) {
+  // Backward-compatible aliases
+  window.openPaymentModal = function(accId, type = 'regular', amount = '', budgetCatId = '') {
+    openTransactionModal({ mode: 'payment', accId, type, amount, budgetCatId });
+  };
+  window.openExpenseModal = function(accId) {
+    openTransactionModal({ mode: 'debit', accId });
+  };
+
+  window.saveTransaction = function(e) {
     e.preventDefault();
-    const paidByProfileId = document.getElementById('payProfileId').value;
-    const type = document.getElementById('payType').value;
-    const amount = Number(document.getElementById('payAmount').value);
-    const date = document.getElementById('payDate').value;
-    const notes = document.getElementById('payNotes').value;
+    const mode = document.getElementById('txMode').value;
+    const profileId = document.getElementById('txProfileId').value;
+    const amount = Number(document.getElementById('txAmount').value);
+    const date = document.getElementById('txDate').value;
+    const notes = document.getElementById('txNotes').value;
     if (amount <= 0) return;
 
+    if (mode === 'debit') {
+      const accountId = document.getElementById('txAccountId').value;
+      const spendType = document.getElementById('txSpendType').value;
+      const category = document.getElementById('txDebitCategory').value;
+      const acc = state.accounts.find(a => a.id === accountId);
+      if (!acc) return alert('Select a valid card/account.');
+      acc.currentBalance = Number(acc.currentBalance) + amount;
+      state.expenses.push({
+        id: 'exp_' + Date.now(),
+        accountId,
+        accountName: acc.name,
+        spentByProfileId: profileId,
+        category,
+        spendType,
+        amount,
+        date,
+        notes
+      });
+      saveState();
+      document.getElementById('transactionModal').close();
+      renderAll();
+      return;
+    }
+
+    const type = document.getElementById('txPayType').value;
     if (type === 'adhoc') {
-      const budgetCategoryId = document.getElementById('payBudgetCategoryId').value;
+      const budgetCategoryId = document.getElementById('txBudgetCategoryId').value;
       const bItem = state.monthlyBudgetExpenses.find(b => b.id === budgetCategoryId);
       if (!bItem) {
         alert('Please add an Adhoc expense category in the Monthly Budget tab first.');
@@ -1522,51 +1607,27 @@
         accountName: bItem.name,
         budgetCategoryId: bItem.id,
         budgetCategoryName: bItem.name,
-        paidByProfileId,
+        paidByProfileId: profileId,
         type: 'adhoc',
         amount,
         date,
         notes
       });
       saveState();
-      document.getElementById('paymentModal').close();
+      document.getElementById('transactionModal').close();
       renderAll();
       return;
     }
 
-    const accountId = document.getElementById('payAccountId').value;
+    const accountId = document.getElementById('txAccountId').value;
     const acc = state.accounts.find(a => a.id === accountId);
-    if (!acc) return;
+    if (!acc) return alert('Select a valid account.');
     acc.currentBalance = Math.max(0, Number(acc.currentBalance) - amount);
     if (type === 'balloon' && acc.balloonAmount > 0) acc.balloonAmount = Math.max(0, Number(acc.balloonAmount) - amount);
-    state.payments.push({ id: 'pay_' + Date.now(), accountId, accountName: acc.name, paidByProfileId, type, amount, date, notes });
-    saveState(); document.getElementById('paymentModal').close(); renderAll();
-  };
-
-  window.openExpenseModal = function(accId) {
-    if (!state.accounts.length) return alert('Add a debt account first.');
-    document.getElementById('expAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
-    if (accId) document.getElementById('expAccountId').value = accId;
-    document.getElementById('expProfileId').innerHTML = state.profiles.map(p => `<option value="${p.id}">${p.emoji} ${p.name}</option>`).join('');
-    document.getElementById('expAmount').value = '';
-    document.getElementById('expDate').value = todayStr();
-    document.getElementById('expenseModal').showModal();
-  };
-
-  window.saveExpense = function(e) {
-    e.preventDefault();
-    const accountId = document.getElementById('expAccountId').value;
-    const spentByProfileId = document.getElementById('expProfileId').value;
-    const spendType = document.getElementById('expSpendType').value;
-    const category = document.getElementById('expCategory').value;
-    const amount = Number(document.getElementById('expAmount').value);
-    const date = document.getElementById('expDate').value;
-    const notes = document.getElementById('expNotes').value;
-    const acc = state.accounts.find(a => a.id === accountId);
-    if (!acc || amount <= 0) return;
-    acc.currentBalance = Number(acc.currentBalance) + amount;
-    state.expenses.push({ id: 'exp_' + Date.now(), accountId, accountName: acc.name, spentByProfileId, category, spendType, amount, date, notes });
-    saveState(); document.getElementById('expenseModal').close(); renderAll();
+    state.payments.push({ id: 'pay_' + Date.now(), accountId, accountName: acc.name, paidByProfileId: profileId, type, amount, date, notes });
+    saveState();
+    document.getElementById('transactionModal').close();
+    renderAll();
   };
 
   window.openAccountModal = function(id) {
