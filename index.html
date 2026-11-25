@@ -528,13 +528,14 @@
   <h3 id="txModalTitle" style="margin-bottom:14px;">Log Transaction</h3>
   <form onsubmit="saveTransaction(event)">
     <!-- Mode Selector: Debit (Card Charge) on left vs Payment on right -->
-    <div class="form-group">
+    <div class="form-group" id="txModeSelectorGroup">
       <label>Transaction Type</label>
       <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
         <button type="button" id="txModeDebitBtn" class="amber" onclick="setTransactionMode('debit')">💳 Debit (Card Charge)</button>
         <button type="button" id="txModePaymentBtn" class="ghost" onclick="setTransactionMode('payment')">💸 Payment (Credit / Paydown)</button>
       </div>
       <input type="hidden" id="txMode" value="debit" />
+      <input type="hidden" id="txLockDebitOnly" value="0" />
     </div>
 
     <div class="form-row">
@@ -908,7 +909,7 @@
       .filter(p => p.type === 'adhoc' && p.budgetCategoryId === budgetExpenseId && (p.date || '').startsWith(activeYM))
       .reduce((s, p) => s + Number(p.amount || 0), 0);
     const expSum = (state.expenses || [])
-      .filter(e => (e.spendType === 'adhoc' || e.type === 'adhoc') && e.budgetCategoryId === budgetExpenseId && (e.date || '').startsWith(activeYM))
+      .filter(e => e.budgetCategoryId === budgetExpenseId && (e.date || '').startsWith(activeYM))
       .reduce((s, e) => s + Number(e.amount || 0), 0);
     return paySum + expSum;
   }
@@ -1270,7 +1271,13 @@
     applyDueDayAutoTick(state.budgetMonth);
 
     const visIncomes = state.monthlyIncomes.filter(i => isVisibleForActiveProfile(i.ownerId));
-    const visExpenses = state.monthlyBudgetExpenses.filter(e => isVisibleForActiveProfile(e.ownerId));
+    const visExpenses = state.monthlyBudgetExpenses
+      .filter(e => isVisibleForActiveProfile(e.ownerId))
+      .sort((a, b) => {
+        const aAdhoc = (a.category || '').toLowerCase() === 'adhoc' ? 0 : 1;
+        const bAdhoc = (b.category || '').toLowerCase() === 'adhoc' ? 0 : 1;
+        return aAdhoc - bAdhoc;
+      });
 
     const getEffectiveExpenseAmount = (e) => {
       if ((e.category || '').toLowerCase() === 'adhoc') {
@@ -1355,7 +1362,7 @@
               <strong>${fmt(effectiveAmt)}</strong>
               ${isAdhoc ? `<div style="font-size:0.7rem; color:var(--muted);">Est: ${fmt(estAmt)}</div>` : ''}
             </div>
-            ${isAdhoc ? `<button class="primary" style="padding:5px 8px; font-size:0.75rem;" onclick="openTransactionModal({ mode: 'payment', type: 'adhoc', budgetCatId: '${exp.id}' })" title="Log an Adhoc ledger entry to this category">+ Log</button>` : ''}
+            ${isAdhoc ? `<button class="amber" style="padding:5px 8px; font-size:0.75rem;" onclick="openTransactionModal({ mode: 'debit', budgetCatId: '${exp.id}', lockDebitOnly: true })" title="Log a card charge to this Adhoc category">+ Log</button>` : ''}
             <button class="ghost" style="padding:5px 8px;" onclick="openBudgetExpenseModal('${exp.id}')">✏️</button>
             <button class="danger" style="padding:5px 8px;" onclick="deleteBudgetExpenseItem('${exp.id}')">✕</button>
           </div>
@@ -1599,7 +1606,11 @@
           subType: p.type
         };
       }),
-      ...state.expenses.map(e => ({ kind: 'expense', id: e.id, date: e.date, accountName: e.accountName, member: getProfileName(e.spentByProfileId), detail: `${e.category} — ${e.notes || ''}`, amount: e.amount, subType: e.spendType }))
+      ...state.expenses.map(e => {
+        const bCat = e.budgetCategoryId ? state.monthlyBudgetExpenses.find(b => b.id === e.budgetCategoryId) : null;
+        const adhocTag = bCat ? ` [🧾 ${bCat.name}]` : (e.budgetCategoryName ? ` [🧾 ${e.budgetCategoryName}]` : '');
+        return { kind: 'expense', id: e.id, date: e.date, accountName: e.accountName, member: getProfileName(e.spentByProfileId), detail: `${e.category}${adhocTag} — ${e.notes || ''}`, amount: e.amount, subType: e.spendType };
+      })
     ].sort((a, b) => (b.date || '').localeCompare(a.date || ''));
     document.getElementById('ledgerBody').innerHTML = items.map(it => {
       let badgeHtml = `<span class="pill pill-red">Card Charge</span>`;
@@ -1690,20 +1701,24 @@
   window.toggleTxSubFields = function() {
     const mode = document.getElementById('txMode').value;
     const isDebit = mode === 'debit';
-    const isAdhoc = !isDebit && document.getElementById('txPayType').value === 'adhoc';
+    const isLockedBudgetDebit = isDebit && document.getElementById('txLockDebitOnly').value === '1';
+    const isAdhoc = (!isDebit && document.getElementById('txPayType').value === 'adhoc') || isLockedBudgetDebit;
 
     const accGroup = document.getElementById('txAccountGroup');
     const catGroup = document.getElementById('txBudgetCategoryGroup');
     const accSel = document.getElementById('txAccountId');
     const catSel = document.getElementById('txBudgetCategoryId');
 
-    accGroup.classList.toggle('hidden', isAdhoc);
+    // For debit (including budget-linked debit), show Card/Account; hide Account only for non-card Adhoc payment
+    accGroup.classList.toggle('hidden', !isDebit && isAdhoc);
     catGroup.classList.toggle('hidden', !isAdhoc);
-    accSel.required = !isAdhoc;
+    accSel.required = isDebit || !isAdhoc;
     catSel.required = isAdhoc;
 
     document.getElementById('txAccountLabel').textContent = isDebit ? 'Card / Account' : 'Account';
-    if (isDebit) {
+    if (isLockedBudgetDebit) {
+      document.getElementById('txModalTitle').textContent = '💳 Log Adhoc Card Charge';
+    } else if (isDebit) {
       document.getElementById('txModalTitle').textContent = '💳 Log Debit / Card Charge';
     } else if (isAdhoc) {
       document.getElementById('txModalTitle').textContent = '🧾 Log Adhoc Expense';
@@ -1719,12 +1734,16 @@
       return alert('Add a debt account or an Adhoc budget category first.');
     }
 
-    let mode = opts.mode || 'debit';
+    const lockDebitOnly = Boolean(opts.lockDebitOnly);
+    let mode = lockDebitOnly ? 'debit' : (opts.mode || 'debit');
     let type = opts.type || 'regular';
-    if (!state.accounts.length && adhocCats.length) {
+    if (!lockDebitOnly && !state.accounts.length && adhocCats.length) {
       mode = 'payment';
       type = 'adhoc';
     }
+
+    document.getElementById('txLockDebitOnly').value = lockDebitOnly ? '1' : '0';
+    document.getElementById('txModeSelectorGroup').classList.toggle('hidden', lockDebitOnly);
 
     document.getElementById('txAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
     if (opts.accId) document.getElementById('txAccountId').value = opts.accId;
@@ -1755,6 +1774,7 @@
   window.saveTransaction = function(e) {
     e.preventDefault();
     const mode = document.getElementById('txMode').value;
+    const isLockedBudgetDebit = mode === 'debit' && document.getElementById('txLockDebitOnly').value === '1';
     const profileId = document.getElementById('txProfileId').value;
     const amount = Number(document.getElementById('txAmount').value);
     const date = document.getElementById('txDate').value;
@@ -1767,11 +1787,23 @@
       const category = document.getElementById('txDebitCategory').value;
       const acc = state.accounts.find(a => a.id === accountId);
       if (!acc) return alert('Select a valid card/account.');
+
+      let budgetCategoryId = null;
+      let budgetCategoryName = null;
+      if (isLockedBudgetDebit) {
+        budgetCategoryId = document.getElementById('txBudgetCategoryId').value;
+        const bItem = state.monthlyBudgetExpenses.find(b => b.id === budgetCategoryId);
+        if (!bItem) return alert('Select a valid Adhoc budget category.');
+        budgetCategoryName = bItem.name;
+      }
+
       acc.currentBalance = Number(acc.currentBalance) + amount;
       state.expenses.push({
         id: 'exp_' + Date.now(),
         accountId,
         accountName: acc.name,
+        budgetCategoryId,
+        budgetCategoryName,
         spentByProfileId: profileId,
         category,
         spendType,
