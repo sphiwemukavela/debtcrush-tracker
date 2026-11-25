@@ -278,7 +278,7 @@
       <select id="profileFilter" title="Active Profile View">
         <option value="HOUSEHOLD">🏠 Household (All)</option>
       </select>
-      <button id="privacyToggleBtn" class="ghost" onclick="togglePrivacyMode()" title="Hide/Show sensitive balances, income & Debt Overview">🙈 Privacy: Off</button>
+      <button id="privacyToggleBtn" class="ghost" onclick="togglePrivacyMode()" title="Hide/Show Debt Overview & Income">🙈 Hide Debt & Income</button>
       <button class="primary" onclick="openTransactionModal()">+ Transaction</button>
 
       <div class="dropdown">
@@ -381,6 +381,8 @@
         </div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <input type="month" id="budgetMonthInput" onchange="changeBudgetMonth(this.value)" />
+          <button type="button" id="budgetToggleIncomeBtn" class="ghost" onclick="toggleIncomeVisibility()">🙈 Hide Income</button>
+          <button type="button" id="budgetToggleExpensesBtn" class="ghost" onclick="toggleExpensesVisibility()">🙈 Hide Expenses</button>
           <button class="ghost" onclick="openCategoriesModal('budget')">🏷️ Categories</button>
           <button class="ghost" onclick="resetBudgetChecks()" title="Uncheck all expenses for a new month">🔄 Reset Checks</button>
         </div>
@@ -404,9 +406,9 @@
         </div>
         <div id="incomeHiddenBanner" class="sub-card hidden" style="text-align:center; padding:24px 14px;">
           <div style="font-size:1.4rem; margin-bottom:6px;">🙈</div>
-          <div style="font-weight:700; font-size:0.9rem;">Income Hidden</div>
-          <p style="color:var(--muted); font-size:0.78rem; margin:4px 0 12px;">Salary and income sources are concealed.</p>
-          <button type="button" class="ghost" style="padding:5px 10px; font-size:0.78rem;" onclick="toggleIncomeVisibility()">👁️ Show Income</button>
+          <div style="font-weight:700; font-size:0.9rem;">Income Hidden (Saved Safely)</div>
+          <p style="color:var(--muted); font-size:0.78rem; margin:4px 0 12px;">Your income entries are still saved in the cloud — just hidden from view.</p>
+          <button type="button" class="primary" style="padding:6px 12px; font-size:0.8rem;" onclick="toggleIncomeVisibility()">👁️ Show Income</button>
         </div>
         <div id="incomeList" class="stack" style="gap:10px;"></div>
       </div>
@@ -418,7 +420,16 @@
             <h3>✅ Monthly Expenses Checklist</h3>
             <p style="font-size:0.8rem; color:var(--muted);">Auto-ticks on due day or check manually when paid</p>
           </div>
-          <button class="amber" onclick="openBudgetExpenseModal()">+ Add Expense</button>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <button type="button" id="expenseSectionToggleBtn" class="ghost" onclick="toggleExpensesVisibility()" title="Hide/Show expenses checklist">🙈 Hide</button>
+            <button class="amber" onclick="openBudgetExpenseModal()">+ Add Expense</button>
+          </div>
+        </div>
+        <div id="expenseHiddenBanner" class="sub-card hidden" style="text-align:center; padding:24px 14px;">
+          <div style="font-size:1.4rem; margin-bottom:6px;">🙈</div>
+          <div style="font-weight:700; font-size:0.9rem;">Expenses Checklist Hidden</div>
+          <p style="color:var(--muted); font-size:0.78rem; margin:4px 0 12px;">Your bills and expense amounts are concealed (nothing was deleted).</p>
+          <button type="button" class="primary" style="padding:6px 12px; font-size:0.8rem;" onclick="toggleExpensesVisibility()">👁️ Show Expenses</button>
         </div>
         <div id="budgetExpenseList" class="stack" style="gap:10px;"></div>
       </div>
@@ -758,6 +769,7 @@
     theme: 'dark',
     privacyMode: false,
     hideIncome: false,
+    hideExpenses: false,
     strategy: 'avalanche',
     extraMonthlySim: 1500,
     selectedBalloonAccountId: '',
@@ -1007,6 +1019,37 @@
     return changed;
   }
 
+  function ensureExpenseMonthMaps(exp) {
+    const curYM = new Date().toISOString().slice(0, 7);
+    if (!exp.paidByMonth || typeof exp.paidByMonth !== 'object') {
+      exp.paidByMonth = {};
+      if (exp.paid) {
+        exp.paidByMonth[exp.autoTickedForMonth || curYM] = true;
+      }
+    }
+    if (!exp.autoTickedMonths || typeof exp.autoTickedMonths !== 'object') {
+      exp.autoTickedMonths = {};
+      if (exp.autoTickedForMonth) {
+        exp.autoTickedMonths[exp.autoTickedForMonth] = true;
+      }
+    }
+  }
+
+  function isExpensePaidForMonth(exp, targetYearMonth) {
+    ensureExpenseMonthMaps(exp);
+    const activeYM = targetYearMonth || state?.budgetMonth || new Date().toISOString().slice(0, 7);
+    return Boolean(exp.paidByMonth[activeYM]);
+  }
+
+  function setExpensePaidForMonth(exp, targetYearMonth, isPaid) {
+    ensureExpenseMonthMaps(exp);
+    const activeYM = targetYearMonth || state?.budgetMonth || new Date().toISOString().slice(0, 7);
+    exp.paidByMonth[activeYM] = Boolean(isPaid);
+    if (activeYM === new Date().toISOString().slice(0, 7)) {
+      exp.paid = Boolean(isPaid);
+    }
+  }
+
   function isDueDayReachedForMonth(dueDay, targetYearMonth) {
     if (!dueDay || dueDay < 1 || dueDay > 31) return false;
     const now = new Date();
@@ -1026,11 +1069,12 @@
     let changed = false;
 
     for (const exp of state.monthlyBudgetExpenses) {
+      ensureExpenseMonthMaps(exp);
       if (!exp.dueDay) continue;
       if (isDueDayReachedForMonth(exp.dueDay, activeYM)) {
-        if (exp.autoTickedForMonth !== activeYM) {
-          exp.paid = true;
-          exp.autoTickedForMonth = activeYM;
+        if (!exp.autoTickedMonths[activeYM]) {
+          setExpensePaidForMonth(exp, activeYM, true);
+          exp.autoTickedMonths[activeYM] = true;
           changed = true;
         }
       }
@@ -1067,7 +1111,7 @@
     document.body.classList.toggle('privacy-mode', isPriv);
     const btn = document.getElementById('privacyToggleBtn');
     if (btn) {
-      btn.textContent = isPriv ? '👁️ Privacy: On' : '🙈 Privacy: Off';
+      btn.textContent = isPriv ? '👁️ Show Debt & Income' : '🙈 Hide Debt & Income';
       btn.className = isPriv ? 'amber' : 'ghost';
     }
     const dashMain = document.getElementById('dashboardMainContent');
@@ -1081,7 +1125,10 @@
   window.togglePrivacyMode = function() {
     if (!state) return;
     state.privacyMode = !state.privacyMode;
-    if (!state.privacyMode) state.hideIncome = false;
+    if (!state.privacyMode) {
+      state.hideIncome = false;
+      state.hideExpenses = false;
+    }
     saveState();
     applyPrivacyUI();
     renderBudgetTab();
@@ -1097,6 +1144,13 @@
     }
     saveState();
     applyPrivacyUI();
+    renderBudgetTab();
+  };
+
+  window.toggleExpensesVisibility = function() {
+    if (!state) return;
+    state.hideExpenses = !state.hideExpenses;
+    saveState();
     renderBudgetTab();
   };
 
@@ -1372,49 +1426,77 @@
       return Number(e.amount || 0);
     };
 
+    const activeYM = state.budgetMonth;
     const totalIncome = visIncomes.reduce((s, i) => s + Number(i.amount || 0), 0);
     const totalBudgeted = visExpenses.reduce((s, e) => s + getEffectiveExpenseAmount(e), 0);
-    const totalPaid = visExpenses.filter(e => e.paid).reduce((s, e) => s + getEffectiveExpenseAmount(e), 0);
+    const totalPaid = visExpenses.filter(e => isExpensePaidForMonth(e, activeYM)).reduce((s, e) => s + getEffectiveExpenseAmount(e), 0);
     const unpaidRemaining = Math.max(0, totalBudgeted - totalPaid);
     const leftForMonth = totalIncome - totalBudgeted;
 
     const maskInc = Boolean(state.privacyMode || state.hideIncome);
+    const maskExp = Boolean(state.hideExpenses);
     const incValHtml = maskInc ? 'R ••••••' : fmt(totalIncome);
-    const leftValHtml = maskInc ? 'R ••••••' : fmt(leftForMonth);
+    const expValHtml = maskExp ? 'R ••••••' : fmt(totalBudgeted);
+    const unpaidValHtml = maskExp ? 'R ••••••' : fmt(unpaidRemaining);
+    const leftValHtml = (maskInc || maskExp) ? 'R ••••••' : fmt(leftForMonth);
 
     document.getElementById('budgetKpiGrid').innerHTML = `
       <div class="card">
         <div class="flex-between" style="gap:4px;">
           <div class="kpi-label">💵 Total Monthly Income</div>
-          <button type="button" class="ghost" style="padding:2px 7px; font-size:0.7rem;" onclick="toggleIncomeVisibility()" title="Toggle income visibility">${maskInc ? '👁️' : '🙈'}</button>
+          <button type="button" class="${maskInc ? 'amber' : 'ghost'}" style="padding:3px 8px; font-size:0.72rem;" onclick="toggleIncomeVisibility()">${maskInc ? '👁️ Show' : '🙈 Hide'}</button>
         </div>
         <div class="kpi-val" style="color:var(--emerald)">${incValHtml}</div>
-        <div class="kpi-sub">${maskInc ? 'Hidden (click eye to reveal)' : `${visIncomes.length} income source(s)`}</div>
+        <div class="kpi-sub">${maskInc ? `${visIncomes.length} source(s) hidden` : `${visIncomes.length} income source(s)`}</div>
       </div>
       <div class="card">
-        <div class="kpi-label">📋 Total Planned Expenses</div>
-        <div class="kpi-val">${fmt(totalBudgeted)}</div>
-        <div class="kpi-sub">${visExpenses.filter(e => e.paid).length} of ${visExpenses.length} bills checked off</div>
+        <div class="flex-between" style="gap:4px;">
+          <div class="kpi-label">📋 Total Planned Expenses</div>
+          <button type="button" class="${maskExp ? 'amber' : 'ghost'}" style="padding:3px 8px; font-size:0.72rem;" onclick="toggleExpensesVisibility()">${maskExp ? '👁️ Show' : '🙈 Hide'}</button>
+        </div>
+        <div class="kpi-val">${expValHtml}</div>
+        <div class="kpi-sub">${visExpenses.filter(e => isExpensePaidForMonth(e, activeYM)).length} of ${visExpenses.length} bills checked off</div>
       </div>
       <div class="card">
         <div class="kpi-label">⏳ Unpaid Bills Left</div>
-        <div class="kpi-val" style="color:var(--amber)">${fmt(unpaidRemaining)}</div>
-        <div class="kpi-sub">${fmt(totalPaid)} already paid</div>
+        <div class="kpi-val" style="color:var(--amber)">${unpaidValHtml}</div>
+        <div class="kpi-sub">${maskExp ? 'Hidden' : `${fmt(totalPaid)} already paid`}</div>
       </div>
       <div class="card">
         <div class="kpi-label">🎯 Left For The Month</div>
         <div class="kpi-val" style="color:${leftForMonth >= 0 ? 'var(--emerald)' : 'var(--red)'}">${leftValHtml}</div>
-        <div class="kpi-sub">${maskInc ? 'Hidden while income is concealed' : (leftForMonth >= 0 ? 'Available for extra debt attack / savings' : 'Over budget — expenses exceed income')}</div>
+        <div class="kpi-sub">${(maskInc || maskExp) ? 'Hidden while income/expenses are concealed' : (leftForMonth >= 0 ? 'Available for extra debt attack / savings' : 'Over budget — expenses exceed income')}</div>
       </div>
     `;
 
     const incListEl = document.getElementById('incomeList');
     const incBannerEl = document.getElementById('incomeHiddenBanner');
     const incToggleBtn = document.getElementById('incomeSectionToggleBtn');
+    const topIncBtn = document.getElementById('budgetToggleIncomeBtn');
     if (incListEl && incBannerEl && incToggleBtn) {
       incListEl.classList.toggle('hidden', maskInc);
       incBannerEl.classList.toggle('hidden', !maskInc);
       incToggleBtn.textContent = maskInc ? '👁️ Show' : '🙈 Hide';
+      incToggleBtn.className = maskInc ? 'primary' : 'ghost';
+    }
+    if (topIncBtn) {
+      topIncBtn.textContent = maskInc ? '👁️ Show Income' : '🙈 Hide Income';
+      topIncBtn.className = maskInc ? 'primary' : 'ghost';
+    }
+
+    const expListEl = document.getElementById('budgetExpenseList');
+    const expBannerEl = document.getElementById('expenseHiddenBanner');
+    const expToggleBtn = document.getElementById('expenseSectionToggleBtn');
+    const topExpBtn = document.getElementById('budgetToggleExpensesBtn');
+    if (expListEl && expBannerEl && expToggleBtn) {
+      expListEl.classList.toggle('hidden', maskExp);
+      expBannerEl.classList.toggle('hidden', !maskExp);
+      expToggleBtn.textContent = maskExp ? '👁️ Show' : '🙈 Hide';
+      expToggleBtn.className = maskExp ? 'primary' : 'ghost';
+    }
+    if (topExpBtn) {
+      topExpBtn.textContent = maskExp ? '👁️ Show Expenses' : '🙈 Hide Expenses';
+      topExpBtn.className = maskExp ? 'primary' : 'ghost';
     }
 
     // Render Income List
@@ -1448,10 +1530,11 @@
         ? `${exp.category} · ${getProfileName(exp.ownerId)} · Est: ${fmt(estAmt)} | Actual: ${fmt(effectiveAmt)}`
         : `${exp.category} · ${getProfileName(exp.ownerId)}`;
 
+      const isPaidThisMonth = isExpensePaidForMonth(exp, activeYM);
       return `
-        <div class="budget-item ${exp.paid ? 'paid' : ''}">
+        <div class="budget-item ${isPaidThisMonth ? 'paid' : ''}">
           <div class="budget-left">
-            <input type="checkbox" class="budget-check" ${exp.paid ? 'checked' : ''} onchange="toggleBudgetExpensePaid('${exp.id}', this.checked)" />
+            <input type="checkbox" class="budget-check" ${isPaidThisMonth ? 'checked' : ''} onchange="toggleBudgetExpensePaid('${exp.id}', this.checked)" />
             <div>
               <div class="budget-title" style="font-weight:700;">${exp.name} ${badges}</div>
               <div style="font-size:0.76rem; color:var(--muted);">
@@ -1573,7 +1656,8 @@
       ownerId: ownerVal,
       dueDay: dueDayVal,
       paid: existing ? Boolean(existing.paid) : false,
-      autoTickedForMonth: existing ? (existing.autoTickedForMonth || null) : null
+      paidByMonth: existing && existing.paidByMonth ? { ...existing.paidByMonth } : {},
+      autoTickedMonths: existing && existing.autoTickedMonths ? { ...existing.autoTickedMonths } : {}
     };
 
     if (id) {
@@ -1602,10 +1686,10 @@
   window.toggleBudgetExpensePaid = function(id, isChecked) {
     const item = state.monthlyBudgetExpenses.find(x => x.id === id);
     if (!item) return;
-    item.paid = isChecked;
-    // Mark current budgetMonth as handled so unchecking stays unchecked for this month
-    if (!isChecked && item.dueDay) {
-      item.autoTickedForMonth = state.budgetMonth || new Date().toISOString().slice(0, 7);
+    const activeYM = state.budgetMonth || new Date().toISOString().slice(0, 7);
+    setExpensePaidForMonth(item, activeYM, isChecked);
+    if (item.dueDay) {
+      item.autoTickedMonths[activeYM] = true;
     }
     saveState();
     renderBudgetTab();
@@ -1627,8 +1711,8 @@
     if (!state || !state.monthlyBudgetExpenses.length) return;
     const activeYM = state.budgetMonth || new Date().toISOString().slice(0, 7);
     state.monthlyBudgetExpenses.forEach(e => {
-      e.paid = false;
-      e.autoTickedForMonth = activeYM;
+      setExpensePaidForMonth(e, activeYM, false);
+      if (e.dueDay) e.autoTickedMonths[activeYM] = true;
     });
     saveState();
     renderBudgetTab();
