@@ -1745,7 +1745,10 @@
     document.getElementById('txLockDebitOnly').value = lockDebitOnly ? '1' : '0';
     document.getElementById('txModeSelectorGroup').classList.toggle('hidden', lockDebitOnly);
 
-    document.getElementById('txAccountId').innerHTML = state.accounts.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
+    const accountList = (lockDebitOnly || type === 'adhoc')
+      ? [...state.accounts].sort((a, b) => (a.name || '').localeCompare(b.name || '', undefined, { sensitivity: 'base' }))
+      : state.accounts;
+    document.getElementById('txAccountId').innerHTML = accountList.map(a => `<option value="${a.id}">${a.name}</option>`).join('');
     if (opts.accId) document.getElementById('txAccountId').value = opts.accId;
 
     document.getElementById('txBudgetCategoryId').innerHTML = adhocCats.length
